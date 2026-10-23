@@ -1,0 +1,6 @@
+{
+  "name": "Music Realms — Virtual Learning Adventure",
+  "description": "An interactive 3D fantasy musical sky kingdom featuring explorable learning stations, real-time multiplayer, and teacher curriculum management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
