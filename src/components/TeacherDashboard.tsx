@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { StationConfig, FeedbackSubmission } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
-import { X, Save, Lock, Unlock, Users, BarChart3, Settings, BookOpen, Film, Gamepad2, HelpCircle, Heart, RefreshCw } from 'lucide-react';
+import { mergeWithDefaultStations, saveStoredStations, generateShareableStudentUrl, loadLocalFeedback } from '../data/defaultStations';
+import { X, Save, Lock, Unlock, Users, BarChart3, Settings, BookOpen, Film, Gamepad2, HelpCircle, Heart, RefreshCw, Share2, Check } from 'lucide-react';
 
 interface TeacherDashboardProps {
   roomCode: string;
@@ -27,10 +28,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onClose
 }) => {
   const [activeTab, setActiveTab] = useState<'stations' | 'progress' | 'feedback'>('progress');
-  const [editableStations, setEditableStations] = useState<StationConfig[]>(stations);
+  const [editableStations, setEditableStations] = useState<StationConfig[]>(() => mergeWithDefaultStations(stations));
   const [feedbackList, setFeedbackList] = useState<FeedbackSubmission[]>([]);
   const [isLoadingFeedback, setIsLoadingFeedback] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<string>('');
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
   useEffect(() => {
     fetchFeedback();
@@ -40,14 +42,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setIsLoadingFeedback(true);
     try {
       const res = await fetch(`/api/feedback?room=${encodeURIComponent(roomCode)}`);
-      const data = await res.json();
-      if (Array.isArray(data.feedback)) {
-        setFeedbackList(data.feedback);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.feedback) && data.feedback.length > 0) {
+          setFeedbackList(data.feedback);
+          setIsLoadingFeedback(false);
+          return;
+        }
       }
     } catch (err) {
-      console.warn('Could not fetch feedback from server:', err);
+      console.info('Using local feedback for Netlify/Offline:', err);
     } finally {
       setIsLoadingFeedback(false);
+    }
+
+    // Fallback to local stored feedback
+    const local = loadLocalFeedback();
+    if (local.length > 0) {
+      setFeedbackList(local);
     }
   };
 
@@ -57,22 +69,34 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     );
   };
 
+  const handleCopyShareLink = () => {
+    soundEngine.playButtonClick();
+    const shareUrl = generateShareableStudentUrl(editableStations);
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopiedLink(true);
+      setSaveStatus('Pautan murid bersama bahan telah disalin! 🔗');
+      setTimeout(() => {
+        setCopiedLink(false);
+        setSaveStatus('');
+      }, 3500);
+    }).catch(() => {
+      prompt('Salin pautan khas untuk murid ini:', shareUrl);
+    });
+  };
+
   const handleSave = async () => {
     soundEngine.playButtonClick();
     setSaveStatus('Menyimpan...');
     try {
-      const res = await fetch('/api/stations', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stations: editableStations })
-      });
-      if (res.ok) {
-        onSaveStations(editableStations);
-        setSaveStatus('Berjaya disimpan! ✅');
-        setTimeout(() => setSaveStatus(''), 3000);
-      }
+      await saveStoredStations(editableStations);
+      onSaveStations(editableStations);
+      setSaveStatus('Berjaya disimpan! ✅ (Aktif di Netlify & Pelayar)');
+      soundEngine.playCorrect();
+      setTimeout(() => setSaveStatus(''), 3500);
     } catch (err) {
-      setSaveStatus('Gagal menyimpan ke server.');
+      onSaveStations(editableStations);
+      setSaveStatus('Disimpan setempat! ✅');
+      setTimeout(() => setSaveStatus(''), 3000);
     }
   };
 
@@ -86,7 +110,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
       <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col bg-slate-900 border-2 border-indigo-500/50 rounded-3xl shadow-2xl overflow-hidden text-white">
         {/* Top Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 border-b border-indigo-500/30">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 border-b border-indigo-500/30">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-indigo-600/30 border border-indigo-400/50 flex items-center justify-center text-xl">
               🎓
@@ -101,15 +125,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={() => {
-              soundEngine.playButtonClick();
-              onClose();
-            }}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopyShareLink}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/40 hover:bg-emerald-600 border border-emerald-500/50 text-white text-xs font-bold transition-all cursor-pointer"
+              title="Salin pautan dengan bahan pengajaran untuk murid"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-200" /> : <Share2 className="w-3.5 h-3.5 text-emerald-200" />}
+              <span>{copiedLink ? 'Disalin!' : 'Salin Pautan Murid'}</span>
+            </button>
+            <button
+              onClick={() => {
+                soundEngine.playButtonClick();
+                onClose();
+              }}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}

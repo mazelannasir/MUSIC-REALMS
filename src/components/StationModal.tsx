@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { StationConfig, StationId } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
+import { saveLocalFeedback } from '../data/defaultStations';
 import { X, CheckCircle, ChevronLeft, ChevronRight, Play, Volume2, Star, Trophy, Sparkles, RefreshCw, Send, ExternalLink, Edit3, Info, BookOpen, Layers } from 'lucide-react';
 
 interface StationModalProps {
@@ -1137,21 +1138,26 @@ const EmojiFeedbackContent: React.FC<{
     setIsSubmitting(true);
     soundEngine.playFeedbackSubmit();
 
+    const payload = {
+      roomCode,
+      studentName: playerName,
+      avatarId,
+      emoji: selectedEmoji,
+      ratingScore,
+      comment
+    };
+
+    // Always save locally so Teacher Dashboard on Netlify receives the feedback
+    saveLocalFeedback(payload);
+
     try {
       await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomCode,
-          studentName: playerName,
-          avatarId,
-          emoji: selectedEmoji,
-          ratingScore,
-          comment
-        })
+        body: JSON.stringify(payload)
       });
     } catch (err) {
-      console.warn('Saved feedback locally due to offline network:', err);
+      console.info('Saved feedback locally (Netlify/Offline):', err);
     } finally {
       setIsSubmitting(false);
       setIsSubmitted(true);

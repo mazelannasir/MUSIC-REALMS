@@ -11,6 +11,7 @@ import { MusicWorld } from './game3d/MusicWorld';
 import { MultiplayerService } from './multiplayer/multiplayerService';
 import { StationConfig, StationId, PlayerAnim, PlayerData } from './types/game';
 import { soundEngine } from './audio/soundEngine';
+import { DEFAULT_STATIONS, loadStoredStations, saveStoredStations, mergeWithDefaultStations } from './data/defaultStations';
 import { Bell, AlertCircle, Sparkles } from 'lucide-react';
 
 export default function App() {
@@ -27,8 +28,8 @@ export default function App() {
     role: 'student'
   });
 
-  // Stations and Progression State
-  const [stations, setStations] = useState<StationConfig[]>([]);
+  // Stations and Progression State - initialized from local persistent storage with default fallback
+  const [stations, setStations] = useState<StationConfig[]>(() => loadStoredStations());
   const [unlockedStations, setUnlockedStations] = useState<number[]>([1]);
   const [completedStations, setCompletedStations] = useState<number[]>([]);
   const [activeStationModal, setActiveStationModal] = useState<StationConfig | null>(null);
@@ -59,16 +60,23 @@ export default function App() {
   const worldRef = useRef<MusicWorld | null>(null);
   const mpServiceRef = useRef<MultiplayerService | null>(null);
 
-  // Fetch station curriculum from server
+  // Attempt to sync station curriculum from server if available; fallback smoothly on Netlify
   useEffect(() => {
     fetch('/api/stations')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('API server unavailable');
+        return res.json();
+      })
       .then(data => {
-        if (Array.isArray(data.stations)) {
-          setStations(data.stations);
+        if (Array.isArray(data.stations) && data.stations.length > 0) {
+          const merged = mergeWithDefaultStations(data.stations);
+          setStations(merged);
+          saveStoredStations(merged);
         }
       })
-      .catch(err => console.warn('Could not load station data:', err));
+      .catch(err => {
+        console.info('Running in client-side persistence mode (Netlify / Static):', err);
+      });
   }, []);
 
   const showToast = (text: string, type: 'info' | 'warning' | 'success' = 'info') => {
@@ -210,19 +218,33 @@ export default function App() {
       const nextCompleted = [...completedStations, stationId];
       setCompletedStations(nextCompleted);
 
-      // In individual mode, complete station unlocks next station
-      const nextStationId = stationId + 1;
-      if (nextStationId <= 5 && !unlockedStations.includes(nextStationId)) {
-        const nextUnlocked = [...unlockedStations, nextStationId];
-        setUnlockedStations(nextUnlocked);
-        worldRef.current?.updateUnlockedStations(nextUnlocked);
-        showToast(`Stesen ${nextStationId} berjaya dibuka! Jambatan cahaya telah aktif ✨`, 'success');
+      // Progression logic:
+      // Station 1 completed -> unlocks Station 2
+      // Station 2 completed -> unlocks Station 3, 6, 7 (All Game Stations)
+      // Station 3, 6, or 7 completed -> unlocks Station 4 (Quiz Constellation)
+      // Station 4 completed -> unlocks Station 5 (Emoji Feedback Cloud)
+      let newUnlocked = [...unlockedStations];
+      if (stationId === 1) {
+        newUnlocked.push(2);
+      } else if (stationId === 2) {
+        newUnlocked.push(3, 6, 7);
+      } else if (stationId === 3 || stationId === 6 || stationId === 7) {
+        newUnlocked.push(4);
+      } else if (stationId === 4) {
+        newUnlocked.push(5);
+      }
+
+      const uniqueUnlocked = Array.from(new Set(newUnlocked));
+      if (uniqueUnlocked.length > unlockedStations.length) {
+        setUnlockedStations(uniqueUnlocked);
+        worldRef.current?.updateUnlockedStations(uniqueUnlocked);
+        showToast('Stesen seterusnya berjaya dibuka! Jambatan cahaya telah aktif ✨', 'success');
       }
     }
   };
 
   const handleOpenStation = (id: StationId) => {
-    const st = stations.find(s => s.id === id);
+    const st = stations.find(s => s.id === id) || DEFAULT_STATIONS.find(s => s.id === id);
     if (st) {
       soundEngine.playInteract();
       setActiveStationModal(st);
@@ -295,7 +317,8 @@ export default function App() {
               initialStationId={editorTargetStation}
               onSave={(updated) => {
                 setStations(updated);
-                showToast('Bahan stesen berjaya dikemaskini! ✨', 'success');
+                saveStoredStations(updated);
+                showToast('Bahan stesen berjaya dikemaskini dan disimpan! ✨', 'success');
               }}
               onClose={() => setShowTeacherMaterialEditor(false)}
             />
@@ -361,12 +384,13 @@ export default function App() {
               initialStationId={editorTargetStation}
               onSave={(updated) => {
                 setStations(updated);
+                saveStoredStations(updated);
                 // Also update active station modal if currently open
                 if (activeStationModal) {
                   const refreshed = updated.find(s => s.id === activeStationModal.id);
                   if (refreshed) setActiveStationModal(refreshed);
                 }
-                showToast('Bahan stesen berjaya dikemaskini! ✨', 'success');
+                showToast('Bahan stesen berjaya dikemaskini dan disimpan! ✨', 'success');
               }}
               onClose={() => setShowTeacherMaterialEditor(false)}
             />
@@ -388,7 +412,11 @@ export default function App() {
               unlockedStations={unlockedStations}
               mode={progressionMode}
               connectedPlayersCount={onlineCount}
-              onSaveStations={(updated) => setStations(updated)}
+              onSaveStations={(updated) => {
+                setStations(updated);
+                saveStoredStations(updated);
+                showToast('Bahan stesen berjaya disimpan! ✨', 'success');
+              }}
               onUnlockClassStation={(stId) => {
                 mpServiceRef.current?.sendTeacherUnlock(stId);
                 setUnlockedStations(prev => {

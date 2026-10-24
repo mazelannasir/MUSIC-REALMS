@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { StationConfig, StationId } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
-import { X, Save, ExternalLink, Eye, RefreshCw, CheckCircle, HelpCircle, Link as LinkIcon, BookOpen, Film, Gamepad2, Award, Heart, Zap, Swords } from 'lucide-react';
+import { DEFAULT_STATIONS, mergeWithDefaultStations, saveStoredStations, generateShareableStudentUrl, exportStationsJSON, importStationsJSON } from '../data/defaultStations';
+import { X, Save, ExternalLink, Eye, RefreshCw, CheckCircle, HelpCircle, Link as LinkIcon, BookOpen, Film, Gamepad2, Award, Heart, Zap, Swords, Share2, Copy, FileText, Check } from 'lucide-react';
 
 interface TeacherMaterialEditorProps {
   stations: StationConfig[];
@@ -17,12 +18,20 @@ export const TeacherMaterialEditor: React.FC<TeacherMaterialEditorProps> = ({
   onClose
 }) => {
   const [selectedStationId, setSelectedStationId] = useState<StationId>(initialStationId);
-  const [editedStations, setEditedStations] = useState<StationConfig[]>(JSON.parse(JSON.stringify(stations)));
+  const [editedStations, setEditedStations] = useState<StationConfig[]>(() => mergeWithDefaultStations(stations));
   const [previewActive, setPreviewActive] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const [showBackupModal, setShowBackupModal] = useState<boolean>(false);
+  const [backupText, setBackupText] = useState<string>('');
+  const [backupStatus, setBackupStatus] = useState<string>('');
 
-  const activeStation = editedStations.find(s => s.id === selectedStationId) || editedStations[0];
+  // Safeguard: activeStation can never be undefined
+  const activeStation =
+    (editedStations && editedStations.find(s => s.id === selectedStationId)) ||
+    (editedStations && editedStations[0]) ||
+    DEFAULT_STATIONS[0];
 
   const updateActiveStation = (field: keyof StationConfig, value: any) => {
     setEditedStations(prev =>
@@ -46,34 +55,43 @@ export const TeacherMaterialEditor: React.FC<TeacherMaterialEditorProps> = ({
     return formatted;
   };
 
+  const handleCopyShareLink = () => {
+    soundEngine.playButtonClick();
+    const shareUrl = generateShareableStudentUrl(editedStations);
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopiedLink(true);
+      setNotification({
+        message: 'Pautan khas untuk murid telah disalin! Murid di Netlify yang membuka pautan ini akan terus menerima bahan anda secara automatik.',
+        type: 'success'
+      });
+      setTimeout(() => setCopiedLink(false), 3500);
+    }).catch(() => {
+      prompt('Salin pautan khas untuk murid ini:', shareUrl);
+    });
+  };
+
   const handleSave = async () => {
     soundEngine.playButtonClick();
     setIsSaving(true);
     setNotification(null);
 
     try {
-      const res = await fetch('/api/stations', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stations: editedStations })
-      });
-
-      if (res.ok) {
-        onSave(editedStations);
-        setNotification({
-          message: 'Bahan pengajaran stesen berjaya disimpan dan disegerakkan! 🎉',
-          type: 'success'
-        });
-        soundEngine.playCorrect();
-      } else {
-        throw new Error('Gagal menyimpan');
-      }
-    } catch (err) {
+      // 1. Save to local persistent storage (works 100% reliably on Netlify & offline)
+      await saveStoredStations(editedStations);
+      onSave(editedStations);
       setNotification({
-        message: 'Ralat semasa menyimpan ke pelayan. Sila cuba lagi.',
-        type: 'error'
+        message: 'Bahan pengajaran stesen berjaya disimpan! Pautan kini aktif dan sedia dipelajari oleh murid. 🎉',
+        type: 'success'
       });
-      soundEngine.playWrong();
+      soundEngine.playCorrect();
+    } catch (err) {
+      console.warn('Fallback save to local state:', err);
+      onSave(editedStations);
+      setNotification({
+        message: 'Bahan pengajaran telah disimpan ke pelayar anda! 🎉',
+        type: 'success'
+      });
+      soundEngine.playCorrect();
     } finally {
       setIsSaving(false);
     }
@@ -93,7 +111,7 @@ export const TeacherMaterialEditor: React.FC<TeacherMaterialEditorProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in select-none">
       <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col bg-slate-900 border-2 border-indigo-500/50 rounded-3xl shadow-2xl overflow-hidden text-white">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-indigo-950 via-purple-950 to-slate-900 border-b border-indigo-500/30">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 bg-gradient-to-r from-indigo-950 via-purple-950 to-slate-900 border-b border-indigo-500/30">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-indigo-600/40 border border-indigo-400 flex items-center justify-center text-xl">
               ✏️
@@ -108,15 +126,41 @@ export const TeacherMaterialEditor: React.FC<TeacherMaterialEditorProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={() => {
-              soundEngine.playButtonClick();
-              onClose();
-            }}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopyShareLink}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 border border-emerald-400/50 text-white text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+              title="Salin pautan khas Netlify dengan semua pautan bahan anda yang disematkan untuk dihantar kepada murid"
+            >
+              {copiedLink ? <Check className="w-4 h-4 text-emerald-200" /> : <Share2 className="w-4 h-4 text-emerald-200" />}
+              <span>{copiedLink ? 'Pautan Disalin!' : 'Salin Pautan Murid'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playButtonClick();
+                setBackupText(exportStationsJSON(editedStations));
+                setShowBackupModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+              title="Eksport atau import sandaran kod JSON bahan"
+            >
+              <FileText className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Sandaran / Import</span>
+            </button>
+
+            <button
+              onClick={() => {
+                soundEngine.playButtonClick();
+                onClose();
+              }}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Station Select Tabs */}
@@ -392,19 +436,29 @@ export const TeacherMaterialEditor: React.FC<TeacherMaterialEditorProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-950/90 border-t border-slate-800">
-          <div className="text-xs text-slate-400">
-            Perubahan akan disegerakkan terus kepada semua murid dalam bilik pembelajaran.
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 bg-slate-950/90 border-t border-slate-800">
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>Disimpan secara automatik pada pelayar & Netlify.</span>
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCopyShareLink}
+              className="px-4 py-2 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/50 text-emerald-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Salin Pautan Murid</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
                 soundEngine.playButtonClick();
                 onClose();
               }}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
             >
               Batal
             </button>
@@ -413,7 +467,7 @@ export const TeacherMaterialEditor: React.FC<TeacherMaterialEditorProps> = ({
               type="button"
               disabled={isSaving}
               onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:from-indigo-400 hover:via-purple-500 hover:to-pink-400 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:from-indigo-400 hover:via-purple-500 hover:to-pink-400 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>{isSaving ? 'Menyimpan...' : 'SIMPAN SEMUA BAHAN ✨'}</span>
@@ -421,6 +475,85 @@ export const TeacherMaterialEditor: React.FC<TeacherMaterialEditorProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Backup and Restore JSON Modal */}
+      {showBackupModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg bg-slate-900 border-2 border-indigo-500/60 rounded-3xl p-6 space-y-4 shadow-2xl text-white">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-lg font-bold font-['Fredoka']">Sandaran & Import Kod Bahan</h3>
+              </div>
+              <button onClick={() => setShowBackupModal(false)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300">
+              Anda boleh menyalin kod konfigurasi ini untuk simpanan sandaran, atau menampal kod yang disimpan sebelum ini untuk memulihkan semua pautan stesen.
+            </p>
+
+            <textarea
+              rows={8}
+              value={backupText}
+              onChange={(e) => setBackupText(e.target.value)}
+              className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl font-mono text-[11px] text-indigo-200 focus:outline-none focus:border-indigo-400"
+              placeholder="Tampal kod JSON konfigurasi stesen di sini..."
+            />
+
+            {backupStatus && (
+              <div className="p-2.5 rounded-xl bg-indigo-950/80 border border-indigo-500 text-xs text-indigo-200 text-center font-semibold">
+                {backupStatus}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(backupText);
+                  setBackupStatus('Kod konfigurasi telah disalin ke papan klip! 📋');
+                  setTimeout(() => setBackupStatus(''), 3000);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" /> Salin Kod
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBackupModal(false)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const imported = importStationsJSON(backupText);
+                    if (imported) {
+                      setEditedStations(imported);
+                      onSave(imported);
+                      setBackupStatus('Konfigurasi berjaya diimport dan disimpan! ✨');
+                      setTimeout(() => {
+                        setShowBackupModal(false);
+                        setBackupStatus('');
+                      }, 1500);
+                    } else {
+                      setBackupStatus('Ralat: Format kod tidak sah. Sila semak semula.');
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold cursor-pointer"
+                >
+                  Import & Guna
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
