@@ -58,7 +58,16 @@ export class MusicWorld {
   private playerRole: 'student' | 'teacher' = 'student';
 
   // Remote players rigs
-  private remotePlayers = new Map<string, { rig: AvatarRig; targetPos: THREE.Vector3; targetRotY: number; anim: PlayerAnim; walkCycle: number }>();
+  private remotePlayers = new Map<string, {
+    rig: AvatarRig;
+    targetPos: THREE.Vector3;
+    targetRotY: number;
+    anim: PlayerAnim;
+    walkCycle: number;
+    email?: string;
+    avatarId: number;
+    name: string;
+  }>();
 
   // Bridge & island meshes
   private bridgeMeshes: {
@@ -1590,20 +1599,58 @@ export class MusicWorld {
   }
 
   // --- Remote Multiplayer Sync ---
-  public updateRemotePlayer(id: string, data: { name: string; avatarId: number; x: number; y: number; z: number; rotY: number; anim: PlayerAnim }) {
+  public updateRemotePlayer(id: string, data: { name: string; avatarId: number; email?: string; x: number; y: number; z: number; rotY: number; anim: PlayerAnim }) {
+    const cleanEmail = (data.email || '').trim().toLowerCase();
+
+    // 1. Deduplication by email: If an avatar already exists for this email under a previous ID, remove it!
+    if (cleanEmail) {
+      for (const [existingId, rp] of this.remotePlayers.entries()) {
+        if (existingId !== id && rp.email && rp.email.trim().toLowerCase() === cleanEmail) {
+          this.scene.remove(rp.rig.root);
+          this.remotePlayers.delete(existingId);
+          break;
+        }
+      }
+    }
+
     let p = this.remotePlayers.get(id);
     if (!p) {
       const rig = this.createRiggedHumanoid(data.avatarId, data.name, false);
+      rig.root.position.set(data.x, data.y, data.z);
+      rig.root.rotation.y = data.rotY;
       this.scene.add(rig.root);
       p = {
         rig,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
         targetRotY: data.rotY,
         anim: data.anim,
-        walkCycle: 0
+        walkCycle: 0,
+        email: cleanEmail,
+        avatarId: data.avatarId,
+        name: data.name
       };
       this.remotePlayers.set(id, p);
+    } else {
+      // If player changed avatar definition, replace rig seamlessly
+      if (p.avatarId !== data.avatarId) {
+        this.scene.remove(p.rig.root);
+        const newRig = this.createRiggedHumanoid(data.avatarId, data.name, false);
+        newRig.root.position.copy(p.rig.root.position);
+        newRig.root.rotation.y = p.rig.root.rotation.y;
+        this.scene.add(newRig.root);
+        p.rig = newRig;
+        p.avatarId = data.avatarId;
+        p.name = data.name;
+      }
+      p.email = cleanEmail || p.email;
     }
+
+    // If remote player teleported or moved long distance (>12 units), snap instantly
+    const currDist = p.rig.root.position.distanceTo(p.targetPos);
+    if (currDist > 12) {
+      p.rig.root.position.set(data.x, data.y, data.z);
+    }
+
     p.targetPos.set(data.x, data.y, data.z);
     p.targetRotY = data.rotY;
     p.anim = data.anim;
@@ -1952,12 +1999,23 @@ export class MusicWorld {
     // Update jointed humanoid limbs with natural kinematics!
     this.updateHumanoidKinematics(this.playerRig, this.currentAnim, this.walkCycleTime, dt);
 
-    // 4. Remote Players Smooth Interpolation
+    // 4. Remote Players Smooth Interpolation (Optimized for up to 20 concurrent players)
     for (const [, rp] of this.remotePlayers) {
-      rp.rig.root.position.lerp(rp.targetPos, Math.min(1, dt * 10));
-      rp.rig.root.rotation.y = THREE.MathUtils.damp(rp.rig.root.rotation.y, rp.targetRotY, 10, dt);
+      rp.rig.root.position.lerp(rp.targetPos, Math.min(1, dt * 12));
+
+      // Shortest angle wrap for rotation to prevent full 360-degree flip
+      let diffRot = (rp.targetRotY - rp.rig.root.rotation.y) % (Math.PI * 2);
+      if (diffRot > Math.PI) diffRot -= Math.PI * 2;
+      if (diffRot < -Math.PI) diffRot += Math.PI * 2;
+      rp.rig.root.rotation.y += diffRot * Math.min(1, dt * 11);
+
       rp.walkCycle += dt * (rp.anim === 'walk' ? 11 : 2.5);
-      this.updateHumanoidKinematics(rp.rig, rp.anim, rp.walkCycle, dt);
+
+      // LOD check: only update full humanoid bone matrices if player is within view range (<50 units)
+      const distToPlayer = this.playerPos.distanceTo(rp.rig.root.position);
+      if (distToPlayer < 50) {
+        this.updateHumanoidKinematics(rp.rig, rp.anim, rp.walkCycle, dt);
+      }
     }
 
     // 5. Broadcast Local Movement to WebSocket

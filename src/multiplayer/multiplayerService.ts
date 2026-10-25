@@ -28,6 +28,10 @@ export class MultiplayerService {
   private wsTimeoutId: number | null = null;
   private fallbackTriggered = false;
 
+  // Throttling for smooth 20-player bandwidth
+  private lastSentMove = { x: 0, y: 0, z: 0, rotY: 0, anim: 'idle' as PlayerAnim };
+  private lastSentTime = 0;
+
   constructor(callbacks: MultiplayerCallbacks) {
     this.callbacks = callbacks;
   }
@@ -35,7 +39,10 @@ export class MultiplayerService {
   public connect(roomCode: string, player: Partial<PlayerData>) {
     this.roomCode = roomCode.toUpperCase();
     this.player = player;
-    this.myPlayerId = `p-${Math.random().toString(36).substring(2, 9)}`;
+    const cleanEmail = (player.email || '').trim().toLowerCase();
+    const hash = cleanEmail ? cleanEmail.split('').reduce((a: number, c: string) => ((a << 5) - a) + c.charCodeAt(0), 0) >>> 0 : Math.floor(Math.random() * 1000000);
+    const safeTag = cleanEmail.replace(/[^a-z0-9]/gi, '').slice(0, 8);
+    this.myPlayerId = cleanEmail ? `p-${safeTag || 'usr'}-${hash.toString(36)}` : `p-${Math.random().toString(36).substring(2, 9)}`;
 
     // 1. First attempt native local WebSocket server
     this.tryWebSocketConnection();
@@ -109,7 +116,10 @@ export class MultiplayerService {
 
     const cleanRoom = this.roomCode.toLowerCase().replace(/[^a-z0-9]/g, '') || 'utama';
     const hostPeerId = `mr-host-${cleanRoom}`;
-    this.myPlayerId = `mr-${cleanRoom}-${Math.random().toString(36).substring(2, 8)}`;
+    const cleanEmail = (this.player.email || '').trim().toLowerCase();
+    const hash = cleanEmail ? cleanEmail.split('').reduce((a: number, c: string) => ((a << 5) - a) + c.charCodeAt(0), 0) >>> 0 : Math.floor(Math.random() * 1000000);
+    const safeTag = cleanEmail.replace(/[^a-z0-9]/gi, '').slice(0, 8);
+    this.myPlayerId = cleanEmail ? `mr-${cleanRoom}-${safeTag || 'usr'}-${hash.toString(36)}` : `mr-${cleanRoom}-${Math.random().toString(36).substring(2, 8)}`;
 
     // Try claiming the host role for this room code first
     this.initAsPotentialHost(hostPeerId, cleanRoom);
@@ -135,9 +145,10 @@ export class MultiplayerService {
 
         const selfData: PlayerData = {
           id: id,
-          name: this.player.name || 'Pengembara',
+          name: this.player.name || 'Hos Bilik',
+          email: this.player.email || '',
           avatarId: this.player.avatarId || 1,
-          role: this.player.role || 'student',
+          role: this.player.role || 'teacher',
           x: 0,
           y: 0,
           z: 0,
@@ -239,9 +250,49 @@ export class MultiplayerService {
         if (!msg || !msg.type) return;
 
         if (msg.type === 'join') {
+          const incomingEmail = (msg.player?.email || '').trim().toLowerCase();
+
+          // Deduplicate: If another peer is already connected with this exact same email, evict old connection
+          let peerToEvict: string | null = null;
+          if (incomingEmail) {
+            for (const [peerId, clientData] of this.clientConns.entries()) {
+              const stored = (clientData.player.email || '').trim().toLowerCase();
+              if (stored === incomingEmail && peerId !== conn.peer) {
+                peerToEvict = peerId;
+                break;
+              }
+            }
+          }
+
+          if (peerToEvict) {
+            const staleClient = this.clientConns.get(peerToEvict);
+            if (staleClient) {
+              try { staleClient.conn.close(); } catch {}
+            }
+            this.clientConns.delete(peerToEvict);
+            this.broadcastToClientsExcept('', {
+              type: 'player_left',
+              id: peerToEvict,
+              totalCount: this.clientConns.size + 1
+            });
+            this.callbacks.onPlayerLeft(peerToEvict, this.clientConns.size + 1);
+          }
+
+          // Enforce 20 players room capacity (1 host + 19 clients)
+          if (this.clientConns.size >= 19) {
+            conn.send({
+              type: 'error',
+              code: 'ROOM_FULL',
+              message: 'Bilik ini telah penuh (20/20 pemain).'
+            });
+            conn.close();
+            return;
+          }
+
           const newPlayer: PlayerData = {
             id: conn.peer,
             name: msg.player?.name || 'Murid',
+            email: incomingEmail,
             avatarId: msg.player?.avatarId || 1,
             role: msg.player?.role || 'student',
             x: 0,
@@ -258,6 +309,7 @@ export class MultiplayerService {
             {
               id: this.peer!.id,
               name: this.player.name || 'Hos Bilik',
+              email: this.player.email || '',
               avatarId: this.player.avatarId || 1,
               role: this.player.role || 'teacher',
               x: 0,
@@ -405,6 +457,30 @@ export class MultiplayerService {
 
   // --- OUTGOING ACTIONS ---
   public sendMove(x: number, y: number, z: number, rotY: number, anim: PlayerAnim) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const timeSinceLast = now - this.lastSentTime;
+
+    // Throttle frequency to ~20Hz (max once per 45ms)
+    if (timeSinceLast < 45) {
+      return;
+    }
+
+    const dx = x - this.lastSentMove.x;
+    const dy = y - this.lastSentMove.y;
+    const dz = z - this.lastSentMove.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    const dRot = Math.abs(rotY - this.lastSentMove.rotY);
+
+    const isSignificantMove = distSq > 0.0016 || dRot > 0.04 || anim !== this.lastSentMove.anim;
+    const isPeriodicHeartbeat = timeSinceLast > 1200;
+
+    if (!isSignificantMove && !isPeriodicHeartbeat) {
+      return;
+    }
+
+    this.lastSentTime = now;
+    this.lastSentMove = { x, y, z, rotY, anim };
+
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.sendWS({ type: 'move', x, y, z, rotY, anim });
       return;

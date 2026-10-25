@@ -17,6 +17,7 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 interface PlayerState {
   id: string;
   name: string;
+  email?: string;
   avatarId: number;
   role: 'student' | 'teacher';
   x: number;
@@ -176,7 +177,7 @@ app.post('/api/feedback', (req, res) => {
 });
 
 // WebSocket Server for Real-Time Multiplayer
-const MAX_PLAYERS_PER_ROOM = 15;
+const MAX_PLAYERS_PER_ROOM = 20;
 
 function getOrCreateRoom(code: string): Room {
   const upper = code.trim().toUpperCase() || 'PLAZA-1';
@@ -217,6 +218,32 @@ wss.on('connection', (ws) => {
       if (msg.type === 'join') {
         const { roomCode, player } = msg;
         const targetRoom = getOrCreateRoom(roomCode);
+        const incomingEmail = (player?.email || '').trim().toLowerCase();
+
+        // Check if there is an existing connection with the same email or player id (reconnection / page reload)
+        let existingIdToEvict: string | null = null;
+        for (const [existingId, existingPlayer] of targetRoom.players) {
+          const storedEmail = (existingPlayer.data.email || '').trim().toLowerCase();
+          if ((incomingEmail && storedEmail === incomingEmail) || (player?.id && existingId === player.id)) {
+            existingIdToEvict = existingId;
+            break;
+          }
+        }
+
+        if (existingIdToEvict) {
+          const oldEntry = targetRoom.players.get(existingIdToEvict);
+          if (oldEntry && oldEntry.ws !== ws) {
+            try {
+              oldEntry.ws.terminate();
+            } catch (_) {}
+          }
+          targetRoom.players.delete(existingIdToEvict);
+          broadcastToRoom(targetRoom, {
+            type: 'player_left',
+            id: existingIdToEvict,
+            totalCount: targetRoom.players.size
+          });
+        }
 
         if (targetRoom.players.size >= MAX_PLAYERS_PER_ROOM) {
           ws.send(JSON.stringify({
@@ -228,12 +255,17 @@ wss.on('connection', (ws) => {
         }
 
         currentRoom = targetRoom;
-        const validPlayerId: string = player.id || 'p_' + Math.random().toString(36).substring(2, 8);
+        const hash = incomingEmail ? incomingEmail.split('').reduce((a: number, c: string) => ((a << 5) - a) + c.charCodeAt(0), 0) >>> 0 : Math.floor(Math.random() * 1000000);
+        const safeTag = incomingEmail.replace(/[^a-z0-9]/gi, '').slice(0, 8);
+        const validPlayerId: string = incomingEmail
+          ? `p_${safeTag || 'usr'}_${hash.toString(36)}`
+          : (player.id || 'p_' + Math.random().toString(36).substring(2, 8));
         playerId = validPlayerId;
 
         const newPlayerData: PlayerState = {
           id: validPlayerId,
           name: player.name || 'Pengembara Muzik',
+          email: incomingEmail,
           avatarId: player.avatarId || 1,
           role: player.role || 'student',
           x: player.x ?? 0,

@@ -19,11 +19,13 @@ export default function App() {
   const [playerProfile, setPlayerProfile] = useState<{
     avatarId: number;
     playerName: string;
+    email: string;
     roomCode: string;
     role: 'student' | 'teacher';
   }>({
     avatarId: 1,
     playerName: 'Pengembara Cilik',
+    email: '',
     roomCode: 'REALM-101',
     role: 'student'
   });
@@ -90,6 +92,7 @@ export default function App() {
   const handleStartAdventure = (data: {
     avatarId: number;
     playerName: string;
+    email: string;
     roomCode: string;
     role: 'student' | 'teacher';
   }) => {
@@ -117,6 +120,7 @@ export default function App() {
         welcomeData.players.forEach(p => {
           worldRef.current?.updateRemotePlayer(p.id, {
             name: p.name,
+            email: p.email,
             avatarId: p.avatarId,
             x: p.x,
             y: p.y,
@@ -131,6 +135,7 @@ export default function App() {
         showToast(`${player.name} telah memasuki Music Realms! ✨`, 'info');
         worldRef.current?.updateRemotePlayer(player.id, {
           name: player.name,
+          email: player.email,
           avatarId: player.avatarId,
           x: player.x,
           y: player.y,
@@ -200,6 +205,7 @@ export default function App() {
     // Connect WebSocket
     mp.connect(playerProfile.roomCode, {
       name: playerProfile.playerName,
+      email: playerProfile.email,
       avatarId: playerProfile.avatarId,
       role: playerProfile.role
     });

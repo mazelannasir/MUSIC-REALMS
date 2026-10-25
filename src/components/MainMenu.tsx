@@ -7,6 +7,7 @@ interface MainMenuProps {
   onStartAdventure: (data: {
     avatarId: number;
     playerName: string;
+    email: string;
     roomCode: string;
     role: 'student' | 'teacher';
   }) => void;
@@ -15,8 +16,38 @@ interface MainMenuProps {
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeacherEditor, onOpenInvite }) => {
-  const [selectedAvatarId, setSelectedAvatarId] = useState<number>(1);
-  const [playerName, setPlayerName] = useState<string>('Pengembara Cilik');
+  const [email, setEmail] = useState<string>(() => {
+    try {
+      return localStorage.getItem('music_realms_last_email') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [emailError, setEmailError] = useState<string>('');
+  const [isAvatarBound, setIsAvatarBound] = useState<boolean>(false);
+
+  const [selectedAvatarId, setSelectedAvatarId] = useState<number>(() => {
+    try {
+      const savedEmail = (localStorage.getItem('music_realms_last_email') || '').trim().toLowerCase();
+      if (savedEmail) {
+        const storedAvatar = localStorage.getItem(`music_realms_user_avatar_${savedEmail}`);
+        if (storedAvatar) {
+          const num = parseInt(storedAvatar, 10);
+          if (num >= 1 && num <= 5) return num;
+        }
+      }
+    } catch {}
+    return 1;
+  });
+
+  const [playerName, setPlayerName] = useState<string>(() => {
+    try {
+      return localStorage.getItem('music_realms_last_player_name') || 'Pengembara Cilik';
+    } catch {
+      return 'Pengembara Cilik';
+    }
+  });
+
   const [roomCode, setRoomCode] = useState<string>(() => {
     try {
       const p = new URLSearchParams(window.location.search);
@@ -39,6 +70,29 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
   const [showHowToPlay, setShowHowToPlay] = useState<boolean>(false);
   const [showAbout, setShowAbout] = useState<boolean>(false);
 
+  // Sync avatar when email changes
+  useEffect(() => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setIsAvatarBound(false);
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(`music_realms_user_avatar_${cleanEmail}`);
+      if (stored) {
+        const id = parseInt(stored, 10);
+        if (id >= 1 && id <= 5) {
+          setSelectedAvatarId(id);
+          setIsAvatarBound(true);
+          return;
+        }
+      }
+      setIsAvatarBound(false);
+    } catch {
+      setIsAvatarBound(false);
+    }
+  }, [email]);
+
   useEffect(() => {
     // Listen for Enter key to start adventure
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -48,20 +102,42 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedAvatarId, playerName, roomCode, role, showHowToPlay, showAbout]);
+  }, [selectedAvatarId, playerName, email, roomCode, role, showHowToPlay, showAbout]);
 
   const handleStart = () => {
+    const cleanEmail = email.trim().toLowerCase();
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setEmailError('Sila masukkan alamat emel yang sah (Contoh: m-1234567@moe-dl.edu.my atau nama@gmail.com) terlebih dahulu.');
+      soundEngine.playWrong();
+      return;
+    }
+    setEmailError('');
+
     soundEngine.playButtonClick();
     soundEngine.setMusicEnabled(musicEnabled);
     soundEngine.setSfxEnabled(sfxEnabled);
     if (musicEnabled) {
       soundEngine.startBgm();
     }
-    const cleanName = playerName.trim() || 'Pengembara Muzik';
+
+    const cleanName = playerName.trim() || cleanEmail.split('@')[0] || 'Pengembara Muzik';
     const cleanRoom = roomCode.trim().toUpperCase() || 'REALM-101';
+
+    // Strictly bind this avatar to this email so reloads and re-entries automatically resume it
+    try {
+      localStorage.setItem(`music_realms_user_avatar_${cleanEmail}`, String(selectedAvatarId));
+      localStorage.setItem('music_realms_last_email', cleanEmail);
+      localStorage.setItem('music_realms_last_player_name', cleanName);
+    } catch (e) {
+      console.warn('LocalStorage save error:', e);
+    }
+
     onStartAdventure({
       avatarId: selectedAvatarId,
       playerName: cleanName,
+      email: cleanEmail,
       roomCode: cleanRoom,
       role
     });
@@ -260,89 +336,133 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
           </div>
         </div>
 
-        {/* Inputs: Player Name, Room Code, Role */}
-        <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Name Input */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              Nama Samaran Pemain:
-            </label>
-            <input
-              type="text"
-              maxLength={16}
-              value={playerName}
-              onChange={e => setPlayerName(e.target.value)}
-              placeholder="Masukkan nama anda..."
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700 text-white font-semibold text-sm focus:outline-none focus:border-pink-500 shadow-inner"
-            />
+        {/* Inputs: Email (Mandatory), Player Name, Room Code, Role */}
+        <div className="w-full space-y-3">
+          {/* Email Input (Wajib) */}
+          <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 shadow-md space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <label className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                <span>📧</span> Alamat Emel Murid / Guru <span className="text-pink-400 font-extrabold">(Wajib Diisi):</span>
+              </label>
+              <span className="text-[11px] text-slate-400">
+                1 Emel = 1 Avatar Kekal (Auto-Sambung jika re-entry)
+              </span>
+            </div>
+
+            <div className="relative">
+              <input
+                type="email"
+                value={email}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError('');
+                }}
+                placeholder="Contoh: m-1234567@moe-dl.edu.my atau pengembara@gmail.com"
+                className={`w-full px-4 py-2.5 rounded-xl bg-slate-950/80 border text-white font-medium text-sm focus:outline-none transition-all shadow-inner ${
+                  emailError ? 'border-rose-500 ring-2 ring-rose-500/30' : 'border-slate-700 focus:border-pink-500'
+                }`}
+              />
+            </div>
+
+            {emailError && (
+              <p className="text-xs text-rose-400 font-semibold flex items-center gap-1">
+                <span>⚠️</span> {emailError}
+              </p>
+            )}
+
+            {isAvatarBound && (
+              <div className="flex items-center gap-2 p-2 rounded-xl bg-purple-950/50 border border-purple-500/40 text-xs text-purple-200">
+                <span className="text-base">✨</span>
+                <span>
+                  Selamat kembali! Emel ini terikat dengan avatar <strong>{selectedAvatar.name}</strong>. Anda akan terus menyambung dengan avatar ini tanpa membuat avatar baharu!
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Room Code */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-              <span>Kod Bilik Multiplayer:</span>
-              <span className="text-[10px] text-indigo-300">Maks 15 Pemain</span>
-            </label>
-            <div className="flex gap-1.5">
+          <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Name Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Nama Samaran Pemain:
+              </label>
               <input
                 type="text"
-                maxLength={12}
-                value={roomCode}
-                onChange={e => setRoomCode(e.target.value.toUpperCase())}
-                placeholder="Cth: REALM-101"
-                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700 text-white font-mono font-bold text-sm focus:outline-none focus:border-pink-500 shadow-inner"
+                maxLength={16}
+                value={playerName}
+                onChange={e => setPlayerName(e.target.value)}
+                placeholder="Masukkan nama anda..."
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700 text-white font-semibold text-sm focus:outline-none focus:border-pink-500 shadow-inner"
               />
-              {onOpenInvite && (
+            </div>
+
+            {/* Room Code */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                <span>Kod Bilik Multiplayer:</span>
+                <span className="text-[10px] text-indigo-300 font-bold bg-indigo-950/80 px-2 py-0.5 rounded-full border border-indigo-700/50">Maks 20 Pemain</span>
+              </label>
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  maxLength={12}
+                  value={roomCode}
+                  onChange={e => setRoomCode(e.target.value.toUpperCase())}
+                  placeholder="Cth: REALM-101"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700 text-white font-mono font-bold text-sm focus:outline-none focus:border-pink-500 shadow-inner"
+                />
+                {onOpenInvite && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playButtonClick();
+                      onOpenInvite(roomCode);
+                    }}
+                    className="px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1 transition-all shadow-md active:scale-95 cursor-pointer"
+                    title="Kongsi pautan bilik ini"
+                  >
+                    <span>🔗</span>
+                    <span className="hidden sm:inline">Kongsi</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Role Selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Peranan Pengguna:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     soundEngine.playButtonClick();
-                    onOpenInvite(roomCode);
+                    setRole('student');
                   }}
-                  className="px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1 transition-all shadow-md active:scale-95 cursor-pointer"
-                  title="Kongsi pautan bilik ini"
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                    role === 'student'
+                      ? 'bg-emerald-600/40 border-emerald-400 text-emerald-200'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
                 >
-                  <span>🔗</span>
-                  <span className="hidden sm:inline">Kongsi</span>
+                  🎒 Murid
                 </button>
-              )}
-            </div>
-          </div>
-
-          {/* Role Selector */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              Peranan Pengguna:
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.playButtonClick();
-                  setRole('student');
-                }}
-                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                  role === 'student'
-                    ? 'bg-emerald-600/40 border-emerald-400 text-emerald-200'
-                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                🎒 Murid
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.playButtonClick();
-                  setRole('teacher');
-                }}
-                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                  role === 'teacher'
-                    ? 'bg-indigo-600/40 border-indigo-400 text-indigo-200'
-                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                🎓 Guru
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playButtonClick();
+                    setRole('teacher');
+                  }}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                    role === 'teacher'
+                      ? 'bg-indigo-600/40 border-indigo-400 text-indigo-200'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  🎓 Guru
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -424,7 +544,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
             </h3>
             <div className="text-xs text-slate-300 space-y-3 leading-relaxed">
               <p><strong>Music Realms</strong> ialah platform pembelajaran maya 3D berasaskan penerokaan alam fantasi terapung untuk murid sekolah rendah yang mempelajari modul Pendidikan Muzik.</p>
-              <p>Menyokong sehingga 15 pemain serentak dalam satu bilik maya, membolehkan murid meneroka bersama rakan sekelas dan guru memantau kemajuan serta maklum balas secara langsung.</p>
+              <p>Menyokong sehingga 20 pemain serentak dalam satu bilik maya, membolehkan murid meneroka bersama rakan sekelas dan guru memantau kemajuan serta maklum balas secara langsung.</p>
               <p>Dilengkapi sintesis audio Web Audio API berketepatan tinggi untuk pembelajaran pic not G (392Hz), A (440Hz), dan B (494Hz).</p>
             </div>
             <div className="flex justify-end pt-2">

@@ -5,6 +5,7 @@ export type PlayerAnim = 'idle' | 'walk' | 'jump' | 'dance' | 'wave';
 export interface PlayerData {
   id: string;
   name: string;
+  email?: string;
   avatarId: number;
   role: 'student' | 'teacher';
   x: number;
