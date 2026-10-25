@@ -141,6 +141,14 @@ export class MusicWorld {
     this.renderer.toneMappingExposure = 1.25;
     this.renderer.shadowMap.enabled = !isHeadless;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    
+    // Mobile Touch & Gesture Optimization
+    this.renderer.domElement.style.touchAction = 'none';
+    this.renderer.domElement.style.userSelect = 'none';
+    (this.renderer.domElement.style as any).webkitUserSelect = 'none';
+    container.style.touchAction = 'none';
+    container.style.userSelect = 'none';
+    (container.style as any).webkitUserSelect = 'none';
     container.appendChild(this.renderer.domElement);
 
     // 3. Studio PBR Environment Reflection
@@ -1656,6 +1664,8 @@ export class MusicWorld {
     setTimeout(() => targetGroup.remove(bubble), 4500);
   }
 
+  private activeCameraPointerId: number | null = null;
+
   // --- Controls & Inputs ---
   private bindInputs() {
     window.addEventListener('keydown', this.handleKeyDown);
@@ -1664,8 +1674,20 @@ export class MusicWorld {
     this.container.addEventListener('pointerdown', this.handlePointerDown);
     window.addEventListener('pointermove', this.handlePointerMove);
     window.addEventListener('pointerup', this.handlePointerUp);
+    window.addEventListener('pointercancel', this.handlePointerUp);
     this.container.addEventListener('wheel', this.handleWheel, { passive: true });
     window.addEventListener('resize', this.handleResize);
+
+    // Prevent default touch gestures (pull-to-refresh, pinch zoom) on canvas
+    this.container.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+    this.container.addEventListener('touchmove', (e) => {
+      // Allow single touch for camera drag, but prevent page scroll
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
@@ -1687,29 +1709,39 @@ export class MusicWorld {
   private handleWindowBlur = () => {
     this.keys = {};
     this.isPointerDown = false;
+    this.activeCameraPointerId = null;
   };
 
   private handlePointerDown = (e: PointerEvent) => {
     if (e.button === 0) {
+      // On mobile touch: if touch is in the virtual joystick bottom-left region, don't use it for camera rotate
+      if (e.pointerType === 'touch') {
+        const isJoystickArea = e.clientX < window.innerWidth * 0.45 && e.clientY > window.innerHeight * 0.50;
+        if (isJoystickArea) return;
+      }
+
       this.isPointerDown = true;
+      this.activeCameraPointerId = e.pointerId;
       this.pointerStart.x = e.clientX;
       this.pointerStart.y = e.clientY;
     }
   };
 
   private handlePointerMove = (e: PointerEvent) => {
-    if (!this.isPointerDown) return;
+    if (!this.isPointerDown || (this.activeCameraPointerId !== null && e.pointerId !== this.activeCameraPointerId)) return;
     const dx = e.clientX - this.pointerStart.x;
     const dy = e.clientY - this.pointerStart.y;
     this.pointerStart.x = e.clientX;
     this.pointerStart.y = e.clientY;
 
-    this.camAngle.theta -= dx * 0.0055;
-    this.camAngle.phi = Math.max(0.12, Math.min(1.2, this.camAngle.phi + dy * 0.0045));
+    this.camAngle.theta -= dx * 0.0065;
+    this.camAngle.phi = Math.max(0.12, Math.min(1.2, this.camAngle.phi + dy * 0.0055));
   };
 
-  private handlePointerUp = () => {
+  private handlePointerUp = (e?: PointerEvent) => {
+    if (e && this.activeCameraPointerId !== null && e.pointerId !== this.activeCameraPointerId) return;
     this.isPointerDown = false;
+    this.activeCameraPointerId = null;
   };
 
   private handleWheel = (e: WheelEvent) => {
@@ -1728,6 +1760,11 @@ export class MusicWorld {
   public setJoystickInput(x: number, y: number) {
     this.joystickVector.x = x;
     this.joystickVector.y = y;
+  }
+
+  public rotateCamera(deltaTheta: number, deltaPhi: number = 0) {
+    this.camAngle.theta += deltaTheta;
+    this.camAngle.phi = Math.max(0.12, Math.min(1.2, this.camAngle.phi + deltaPhi));
   }
 
   public triggerJump() {

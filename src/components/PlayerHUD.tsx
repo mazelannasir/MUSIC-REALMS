@@ -24,6 +24,7 @@ interface PlayerHUDProps {
   onLeaveGame: () => void;
   onJoystickMove: (x: number, y: number) => void;
   onJump: () => void;
+  onRotateCamera?: (deltaTheta: number) => void;
 }
 
 export const PlayerHUD: React.FC<PlayerHUDProps> = ({
@@ -46,7 +47,8 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   onOpenInvite,
   onLeaveGame,
   onJoystickMove,
-  onJump
+  onJump,
+  onRotateCamera
 }) => {
   const [isDockCollapsed, setIsDockCollapsed] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -331,46 +333,88 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
         </div>
       )}
 
-      {/* ---------------- MOBILE TOUCH CONTROLS (JOYSTICK & ACTIONS) ---------------- */}
-      <div className="pointer-events-none flex md:hidden items-end justify-between w-full px-2 mb-20">
-        {/* Virtual Joystick */}
-        <div
-          ref={joystickRef}
-          onTouchStart={handleJoystickStart}
-          onTouchMove={handleJoystickMove}
-          onTouchEnd={handleJoystickEnd}
-          className="pointer-events-auto relative w-28 h-28 rounded-full bg-slate-900/60 border-2 border-slate-600/60 backdrop-blur-sm flex items-center justify-center touch-none shadow-xl"
-        >
+      {/* ---------------- MOBILE TOUCH CONTROLS (JOYSTICK, CAMERA & ACTIONS) ---------------- */}
+      <div className="pointer-events-none flex md:hidden items-end justify-between w-full px-2 mb-16">
+        {/* Virtual Joystick with directional guides */}
+        <div className="pointer-events-auto flex flex-col items-center gap-1">
           <div
-            className="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-500 to-pink-500 border-2 border-white/80 shadow-lg pointer-events-none transition-transform duration-75"
-            style={{
-              transform: `translate(${joystickThumb.x}px, ${joystickThumb.y}px)`
-            }}
-          />
+            ref={joystickRef}
+            onTouchStart={handleJoystickStart}
+            onTouchMove={handleJoystickMove}
+            onTouchEnd={handleJoystickEnd}
+            className="relative w-32 h-32 rounded-full bg-slate-900/85 border-2 border-indigo-400/60 backdrop-blur-md flex items-center justify-center touch-none shadow-2xl active:border-pink-400"
+          >
+            {/* Cardinal direction hints */}
+            <span className="absolute top-1 text-[10px] text-indigo-300 font-extrabold select-none">▲</span>
+            <span className="absolute bottom-1 text-[10px] text-indigo-300 font-extrabold select-none">▼</span>
+            <span className="absolute left-1.5 text-[10px] text-indigo-300 font-extrabold select-none">◀</span>
+            <span className="absolute right-1.5 text-[10px] text-indigo-300 font-extrabold select-none">▶</span>
+            <div
+              className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 border-2 border-white shadow-lg pointer-events-none transition-transform duration-75 flex items-center justify-center text-white text-base select-none"
+              style={{
+                transform: `translate(${joystickThumb.x}px, ${joystickThumb.y}px)`
+              }}
+            >
+              🕹️
+            </div>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 tracking-wider">GERAK</span>
         </div>
 
-        {/* Action Buttons (Jump + Interact) */}
-        <div className="pointer-events-auto flex flex-col gap-3">
-          {nearbyStation && (
-            <button
-              onClick={() => {
-                soundEngine.playInteract();
-                onOpenStation(nearbyStation.id);
-              }}
-              className="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-500 to-pink-500 border-2 border-white shadow-xl flex items-center justify-center text-white font-black text-xs active:scale-90 transition-transform"
-            >
-              BUKA ✨
-            </button>
+        {/* Right Side: Camera Rotation & Action Buttons */}
+        <div className="pointer-events-auto flex flex-col items-end gap-2.5">
+          {/* Quick Camera Rotate buttons for Phone */}
+          {onRotateCamera && (
+            <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-2xl border border-slate-700/80 backdrop-blur-md shadow-lg">
+              <button
+                onClick={() => {
+                  soundEngine.playButtonClick();
+                  onRotateCamera(Math.PI / 4);
+                }}
+                className="w-10 h-10 rounded-xl bg-slate-800 active:bg-indigo-600 border border-slate-600 text-white font-black text-base flex items-center justify-center active:scale-90 transition-all shadow cursor-pointer"
+                title="Pusing Kamera Kiri"
+              >
+                ↺
+              </button>
+              <span className="text-[9px] font-bold text-slate-400 px-0.5 uppercase">Kamera</span>
+              <button
+                onClick={() => {
+                  soundEngine.playButtonClick();
+                  onRotateCamera(-Math.PI / 4);
+                }}
+                className="w-10 h-10 rounded-xl bg-slate-800 active:bg-indigo-600 border border-slate-600 text-white font-black text-base flex items-center justify-center active:scale-90 transition-all shadow cursor-pointer"
+                title="Pusing Kamera Kanan"
+              >
+                ↻
+              </button>
+            </div>
           )}
 
-          <button
-            onClick={() => {
-              onJump();
-            }}
-            className="w-16 h-16 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 border-2 border-indigo-300 shadow-xl flex items-center justify-center text-white font-black text-xs active:scale-90 transition-transform"
-          >
-            LOMPAT
-          </button>
+          {/* Action Buttons: Jump + Buka Stesen */}
+          <div className="flex items-center gap-2">
+            {nearbyStation && (
+              <button
+                onClick={() => {
+                  soundEngine.playInteract();
+                  onOpenStation(nearbyStation.id);
+                }}
+                className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-pink-600 border-2 border-white shadow-xl shadow-pink-500/40 flex flex-col items-center justify-center text-white font-black text-[10px] active:scale-90 transition-transform animate-pulse cursor-pointer"
+              >
+                <span className="text-base">✨</span>
+                <span>BUKA</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                onJump();
+              }}
+              className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-indigo-700 border-2 border-indigo-300 shadow-xl shadow-indigo-600/40 flex flex-col items-center justify-center text-white font-black text-[10px] active:scale-90 transition-transform cursor-pointer"
+            >
+              <span className="text-base">⬆️</span>
+              <span>LOMPAT</span>
+            </button>
+          </div>
         </div>
       </div>
 

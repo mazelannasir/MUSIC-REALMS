@@ -3,13 +3,13 @@ import { StationConfig, FeedbackSubmission } from '../types/game';
 export const DEFAULT_STATIONS: StationConfig[] = [
   {
     id: 1,
-    title: "Station 1: Slide Sanctuary",
+    title: "Stesen 1: Slide Sanctuary",
     subtitle: "Pusat Slaid Pembelajaran Guru",
-    description: "Ruangan untuk guru memasukkan bahan slaid pengajaran (Google Slides, Canva atau PDF).",
+    description: "Pelajari kedudukan not muzik G, A, dan B pada garisan dan ruang baluk melalui slaid interaktif Canva guru.",
     contentType: "slides",
-    contentUrl: "",
-    teacherInstructions: "",
-    externalButtonText: "Buka Slaid di Tab Baharu",
+    contentUrl: "https://canva.link/qa14xyv3sw4tko5",
+    teacherInstructions: "Sila buka dan teliti setiap helaian slaid Canva untuk memahami kedudukan not G, A, dan B pada baluk.",
+    externalButtonText: "Buka Slaid Canva di Tab Baharu",
     slides: [
       {
         page: 1,
@@ -43,59 +43,59 @@ export const DEFAULT_STATIONS: StationConfig[] = [
   },
   {
     id: 2,
-    title: "Station 2: Animation Cloud Theatre",
+    title: "Stesen 2: Animation Cloud Theatre",
     subtitle: "Teater Video Animasi Muzik",
-    description: "Ruangan untuk guru memasukkan pautan video animasi pembelajaran muzik (YouTube / MP4).",
+    description: "Tonton video animasi pembelajaran muzik untuk menguasai konsep baluk dan pic not dengan mudah.",
     contentType: "video",
-    contentUrl: "",
-    videoTitle: "",
-    videoDuration: "",
-    videoNotes: "",
-    teacherInstructions: "",
-    externalButtonText: "Tonton Video di Tab Baharu"
+    contentUrl: "https://www.youtube.com/embed/bm67bUPEql0",
+    videoTitle: "Video Pembelajaran Animasi Not Muzik",
+    videoDuration: "Video Interaktif",
+    videoNotes: "Fahami konsep baluk, klef trebel, dan kedudukan not G, A, B.",
+    teacherInstructions: "Tonton video penerangan ini untuk memahami kedudukan not pada baluk secara visual.",
+    externalButtonText: "Tonton Video di YouTube / Tab Baharu"
   },
   {
     id: 3,
     title: "Stesen Game 1: Not Whacker",
     subtitle: "Permainan Ketuk Not Pantas",
-    description: "Ruangan untuk guru memasukkan pautan permainan Not Whacker (Wordwall, Blooket, Scratch, atau pautan web interaktif).",
+    description: "Uji kepantasan anda mengetuk not G, A, dan B yang muncul dengan betul dalam permainan Not Whacker!",
     contentType: "games",
-    contentUrl: "",
-    teacherInstructions: "",
-    externalButtonText: "Buka Permainan di Tab Baharu",
+    contentUrl: "https://not-whacker-permainan-muzik-whack-a-mole.ai.studio/",
+    teacherInstructions: "Ketuk not muzik yang betul secepat mungkin untuk mengumpul markah tertinggi!",
+    externalButtonText: "Main Not Whacker di Tab Baharu",
     games: []
   },
   {
     id: 6,
     title: "Stesen Game 2: Music Beams Liner",
     subtitle: "Permainan Garisan Baluk Muzik",
-    description: "Ruangan untuk guru memasukkan pautan permainan Music Beams Liner (Wordwall, Blooket, Scratch, atau pautan web interaktif).",
+    description: "Kuasai kemahiran membezakan garisan dan ruang baluk dalam permainan interaktif Music Beams Liner!",
     contentType: "games",
-    contentUrl: "",
-    teacherInstructions: "",
-    externalButtonText: "Buka Permainan di Tab Baharu",
+    contentUrl: "https://musicbeamslinertestmoe.netlify.app/",
+    teacherInstructions: "Kenal pasti kedudukan not pada garisan atau ruang baluk dengan tepat!",
+    externalButtonText: "Main Music Beams Liner di Tab Baharu",
     games: []
   },
   {
     id: 7,
     title: "Stesen Game 3: Not Ninja",
     subtitle: "Permainan Hiris Not Muzik Tangkas",
-    description: "Ruangan untuk guru memasukkan pautan permainan Not Ninja (Wordwall, Blooket, Scratch, atau pautan web interaktif).",
+    description: "Gunakan refleks dan ketangkasan anda untuk menghiris not muzik yang betul seperti seorang Ninja muzik!",
     contentType: "games",
-    contentUrl: "",
-    teacherInstructions: "",
-    externalButtonText: "Buka Permainan di Tab Baharu",
+    contentUrl: "https://music-not-ninja.ai.studio/",
+    teacherInstructions: "Hiris not muzik yang diminta dan elakkan daripada memotong not yang salah!",
+    externalButtonText: "Main Not Ninja di Tab Baharu",
     games: []
   },
   {
     id: 4,
-    title: "Station 4: Quiz Constellation",
+    title: "Stesen 4: Kuiz Digital Muzik",
     subtitle: "Konstelasi Kuiz Pembelajaran",
-    description: "Ruangan untuk guru memasukkan pautan kuiz digital (Quizizz, Google Forms, Kahoot).",
+    description: "Uji kefahaman menyeluruh anda tentang not baluk G, A, dan B melalui kuiz digital interaktif!",
     contentType: "quiz",
-    contentUrl: "",
-    teacherInstructions: "",
-    externalButtonText: "Mula Kuiz di Tab Baharu",
+    contentUrl: "https://kuiztest1.netlify.app/",
+    teacherInstructions: "Jawab semua soalan kuiz dengan teliti untuk melengkapkan stesen ini!",
+    externalButtonText: "Mula Kuiz Digital di Tab Baharu",
     quizQuestions: [
       {
         id: 1,
@@ -136,7 +136,7 @@ export const DEFAULT_STATIONS: StationConfig[] = [
   },
   {
     id: 5,
-    title: "Station 5: Emoji Feedback Cloud",
+    title: "Stesen 5: Emoji Feedback Cloud",
     subtitle: "Awan Maklum Balas Pelajar",
     description: "Kongsikan pengalaman pengembaraan anda di Music Realms menggunakan pilihan emoji dan komen kreatif!",
     contentType: "feedback",
@@ -145,11 +145,12 @@ export const DEFAULT_STATIONS: StationConfig[] = [
   }
 ];
 
-export const STORAGE_KEY_STATIONS = 'music_realms_stations_v2';
-export const STORAGE_KEY_FEEDBACK = 'music_realms_feedback_v2';
+export const STORAGE_KEY_STATIONS = 'music_realms_stations_v4';
+export const STORAGE_KEY_FEEDBACK = 'music_realms_feedback_v4';
 
 /**
  * Merge existing or loaded stations with default schema to ensure all 7 stations exist
+ * and ensure user links are never overridden by empty strings
  */
 export function mergeWithDefaultStations(incoming: StationConfig[]): StationConfig[] {
   if (!Array.isArray(incoming) || incoming.length === 0) {
@@ -163,11 +164,12 @@ export function mergeWithDefaultStations(incoming: StationConfig[]): StationConf
       result.push({
         ...defSt,
         ...found,
-        // Ensure critical fields are never undefined
         title: found.title || defSt.title,
         description: found.description || defSt.description,
-        contentUrl: found.contentUrl !== undefined ? found.contentUrl : defSt.contentUrl,
+        // If contentUrl is empty in found, use the official default link
+        contentUrl: (found.contentUrl && found.contentUrl.trim()) ? found.contentUrl : defSt.contentUrl,
         teacherInstructions: found.teacherInstructions !== undefined ? found.teacherInstructions : defSt.teacherInstructions,
+        externalButtonText: found.externalButtonText || defSt.externalButtonText,
         slides: found.slides && found.slides.length > 0 ? found.slides : defSt.slides,
         quizQuestions: found.quizQuestions && found.quizQuestions.length > 0 ? found.quizQuestions : defSt.quizQuestions
       });

@@ -268,6 +268,20 @@ const EmptyStationPlaceholder: React.FC<{
   );
 };
 
+// Helper to convert URLs for safe and proper embedding
+function getEmbedUrl(rawUrl: string): string {
+  if (!rawUrl) return '';
+  const trimmed = rawUrl.trim();
+
+  // YouTube conversion
+  const ytMatch = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+  if (ytMatch && ytMatch[1]) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0&modestbranding=1`;
+  }
+
+  return trimmed;
+}
+
 // -------------------------------------------------------------
 // TEACHER LINKED MATERIAL VIEW COMPONENT
 // -------------------------------------------------------------
@@ -275,61 +289,71 @@ const TeacherLinkedMaterialView: React.FC<{
   station: StationConfig;
   onOpenBuiltin: () => void;
 }> = ({ station, onOpenBuiltin }) => {
-  const url = station.contentUrl || '';
+  const rawUrl = station.contentUrl || '';
+  const embedUrl = getEmbedUrl(rawUrl);
+  const isYouTube = rawUrl.includes('youtube.com') || rawUrl.includes('youtu.be');
+  const isCanva = rawUrl.includes('canva.link') || rawUrl.includes('canva.com');
+  const isGameOrApp = station.contentType === 'games' || station.contentType === 'quiz';
 
   return (
     <div className="space-y-4">
       {/* Teacher Instructions Banner if provided */}
       {station.teacherInstructions && (
-        <div className="p-4 rounded-2xl bg-indigo-950/70 border border-indigo-500/40 flex items-start gap-3">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-indigo-950/70 border border-indigo-500/40 flex items-start gap-3">
           <Info className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-300">
               Arahan Guru:
             </h4>
-            <p className="text-sm text-slate-200 mt-0.5 font-medium">
+            <p className="text-xs sm:text-sm text-slate-200 mt-0.5 font-medium leading-relaxed">
               {station.teacherInstructions}
             </p>
           </div>
         </div>
       )}
 
-      {/* Action banner with direct external link button */}
-      <div className="flex flex-col sm:flex-row items-center justify-between p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700 gap-3">
-        <div className="text-xs text-slate-300">
-          Pautan Bahan: <span className="font-mono text-indigo-300 font-bold break-all">{url}</span>
+      {/* Primary Action Card for All Devices (Especially Mobile Phones) */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-2 border-indigo-500/50 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="space-y-1 text-center sm:text-left w-full sm:w-auto">
+          <div className="flex items-center justify-center sm:justify-start gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
+              {station.title}
+            </span>
+          </div>
+          <p className="text-xs text-slate-300">
+            {isCanva ? 'Slaid Canva Interaktif Guru' : isYouTube ? 'Video Pembelajaran YouTube' : 'Aplikasi / Permainan Digital'}
+          </p>
         </div>
 
         <a
-          href={url}
+          href={rawUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold text-xs whitespace-nowrap shadow-md transition-all active:scale-95"
+          className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-600 hover:from-indigo-400 hover:to-pink-500 text-white font-extrabold text-sm shadow-xl shadow-indigo-600/30 transition-all active:scale-95 cursor-pointer text-center"
         >
-          <span>{station.externalButtonText || 'Buka di Tab Baharu'}</span>
-          <ExternalLink className="w-3.5 h-3.5" />
+          <span>🚀 {station.externalButtonText || 'Buka di Tab Baharu'}</span>
+          <ExternalLink className="w-4 h-4" />
         </a>
       </div>
 
-      {/* Embedded Iframe Container */}
-      <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border-2 border-indigo-500/40 shadow-2xl flex items-center justify-center">
+      {/* Embedded Display (YouTube or Web Iframe) */}
+      <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-slate-950 border-2 border-indigo-500/40 shadow-2xl flex items-center justify-center">
         <iframe
-          src={url}
+          src={embedUrl}
           title={station.title}
-          className="w-full h-full"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          className="w-full h-full border-0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
         />
       </div>
 
-      <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
-        <span>* Sekiranya laman sesawang tidak dipaparkan dalam bingkai di atas, klik butang "Buka di Tab Baharu".</span>
-        <button
-          onClick={onOpenBuiltin}
-          className="text-indigo-400 hover:underline font-semibold"
-        >
-          Tukar ke aktiviti maya asal
-        </button>
+      {/* Helpful Hint for Mobile & Desktop */}
+      <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] sm:text-xs text-slate-400 flex items-center justify-between gap-2">
+        <span>
+          💡 <strong>Tip Pemain:</strong> Jika skrin di atas kelihatan kecil pada telefon atau tidak membenarkan paparan, sila tekan butang <strong>"Buka di Tab Baharu"</strong> di atas. Selepas selesai, kembali ke sini dan tekan <strong>"TANDA SEBAGAI SELESAI"</strong>!
+        </span>
       </div>
     </div>
   );

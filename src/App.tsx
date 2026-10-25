@@ -360,6 +360,7 @@ export default function App() {
             onLeaveGame={handleLeaveGame}
             onJoystickMove={(x, y) => worldRef.current?.setJoystickInput(x, y)}
             onJump={() => worldRef.current?.triggerJump()}
+            onRotateCamera={(dTheta) => worldRef.current?.rotateCamera(dTheta)}
           />
 
           {/* Active Station Learning Modal */}

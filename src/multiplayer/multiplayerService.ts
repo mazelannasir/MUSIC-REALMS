@@ -1,3 +1,4 @@
+import { Peer, DataConnection } from 'peerjs';
 import { PlayerData, PlayerAnim } from '../types/game';
 
 export interface MultiplayerCallbacks {
@@ -13,11 +14,19 @@ export interface MultiplayerCallbacks {
 
 export class MultiplayerService {
   private ws: WebSocket | null = null;
+  private peer: Peer | null = null;
+  private hostConn: DataConnection | null = null;
+  private clientConns = new Map<string, { conn: DataConnection; player: PlayerData }>();
+  
   private roomCode: string = '';
   private player: Partial<PlayerData> = {};
   private callbacks: MultiplayerCallbacks;
+  
   private isConnected = false;
-  private reconnectTimeout: number | null = null;
+  private isHost = false;
+  private myPlayerId: string = '';
+  private wsTimeoutId: number | null = null;
+  private fallbackTriggered = false;
 
   constructor(callbacks: MultiplayerCallbacks) {
     this.callbacks = callbacks;
@@ -26,20 +35,36 @@ export class MultiplayerService {
   public connect(roomCode: string, player: Partial<PlayerData>) {
     this.roomCode = roomCode.toUpperCase();
     this.player = player;
+    this.myPlayerId = `p-${Math.random().toString(36).substring(2, 9)}`;
 
+    // 1. First attempt native local WebSocket server
+    this.tryWebSocketConnection();
+  }
+
+  private tryWebSocketConnection() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
 
     try {
       this.ws = new WebSocket(wsUrl);
 
+      // If WS doesn't establish within 1200ms (standard for static sites like Netlify), switch to PeerJS
+      this.wsTimeoutId = window.setTimeout(() => {
+        if (!this.isConnected && !this.fallbackTriggered) {
+          console.info('[Multiplayer] Local WS timeout. Switching to PeerJS P2P room mesh for Netlify/static.');
+          this.fallbackToPeerJS();
+        }
+      }, 1200);
+
       this.ws.onopen = () => {
+        if (this.wsTimeoutId) clearTimeout(this.wsTimeoutId);
         this.isConnected = true;
-        this.send({
+        this.sendWS({
           type: 'join',
           roomCode: this.roomCode,
           player: this.player
         });
+        console.info('[Multiplayer] Connected via WebSocket server.');
       };
 
       this.ws.onmessage = (event) => {
@@ -52,18 +77,304 @@ export class MultiplayerService {
       };
 
       this.ws.onclose = () => {
+        if (!this.isConnected && !this.fallbackTriggered) {
+          this.fallbackToPeerJS();
+        }
         this.isConnected = false;
       };
 
-      this.ws.onerror = (err) => {
-        console.warn('WebSocket connection error, operating in offline fallback:', err);
+      this.ws.onerror = () => {
+        if (!this.fallbackTriggered) {
+          console.info('[Multiplayer] Native WS unavailable (Static/Netlify host). Launching PeerJS P2P mesh.');
+          this.fallbackToPeerJS();
+        }
       };
-    } catch (err) {
-      console.warn('Could not establish WebSocket, fallback active:', err);
+    } catch {
+      this.fallbackToPeerJS();
     }
   }
 
+  // -------------------------------------------------------------
+  // PEERJS P2P ROOM MESH (STATIC HOSTING & NETLIFY ZERO-SERVER)
+  // -------------------------------------------------------------
+  private fallbackToPeerJS() {
+    if (this.fallbackTriggered) return;
+    this.fallbackTriggered = true;
+
+    if (this.wsTimeoutId) clearTimeout(this.wsTimeoutId);
+    if (this.ws) {
+      try { this.ws.close(); } catch {}
+      this.ws = null;
+    }
+
+    const cleanRoom = this.roomCode.toLowerCase().replace(/[^a-z0-9]/g, '') || 'utama';
+    const hostPeerId = `mr-host-${cleanRoom}`;
+    this.myPlayerId = `mr-${cleanRoom}-${Math.random().toString(36).substring(2, 8)}`;
+
+    // Try claiming the host role for this room code first
+    this.initAsPotentialHost(hostPeerId, cleanRoom);
+  }
+
+  private initAsPotentialHost(hostPeerId: string, cleanRoom: string) {
+    try {
+      this.peer = new Peer(hostPeerId, {
+        debug: 0,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+          ]
+        }
+      });
+
+      this.peer.on('open', (id) => {
+        // Successfully registered as Host!
+        this.isHost = true;
+        this.isConnected = true;
+        console.info(`[Multiplayer P2P] Room Host active for [${this.roomCode}] (ID: ${id})`);
+
+        const selfData: PlayerData = {
+          id: id,
+          name: this.player.name || 'Pengembara',
+          avatarId: this.player.avatarId || 1,
+          role: this.player.role || 'student',
+          x: 0,
+          y: 0,
+          z: 0,
+          rotY: 0,
+          anim: 'idle'
+        };
+
+        this.callbacks.onWelcome({
+          playerId: id,
+          players: [selfData],
+          mode: 'individual',
+          unlockedStations: [1]
+        });
+
+        // Listen for peer students joining this host
+        this.peer?.on('connection', (conn) => {
+          this.handleHostIncomingConnection(conn);
+        });
+      });
+
+      this.peer.on('error', (err: any) => {
+        // If host ID is already taken, someone else is already hosting this room!
+        if (err.type === 'unavailable-id') {
+          console.info(`[Multiplayer P2P] Host already active for [${this.roomCode}]. Connecting as Client.`);
+          this.peer?.destroy();
+          this.initAsClient(hostPeerId);
+        } else {
+          console.warn('[Multiplayer P2P] Peer error:', err);
+        }
+      });
+    } catch (e) {
+      console.warn('[Multiplayer P2P] Setup error:', e);
+    }
+  }
+
+  private initAsClient(hostPeerId: string) {
+    try {
+      this.peer = new Peer(this.myPlayerId, {
+        debug: 0,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+          ]
+        }
+      });
+
+      this.peer.on('open', (clientId) => {
+        this.myPlayerId = clientId;
+        console.info(`[Multiplayer P2P] Client Peer online (${clientId}), connecting to host ${hostPeerId}...`);
+
+        this.hostConn = this.peer!.connect(hostPeerId, {
+          reliable: true
+        });
+
+        this.hostConn.on('open', () => {
+          this.isConnected = true;
+          this.isHost = false;
+          console.info('[Multiplayer P2P] Connected to Room Host successfully!');
+
+          // Send join payload to host
+          this.hostConn!.send({
+            type: 'join',
+            roomCode: this.roomCode,
+            player: {
+              ...this.player,
+              id: clientId
+            }
+          });
+        });
+
+        this.hostConn.on('data', (data: any) => {
+          this.handleMessage(data);
+        });
+
+        this.hostConn.on('close', () => {
+          console.warn('[Multiplayer P2P] Host connection closed.');
+          this.isConnected = false;
+        });
+
+        this.hostConn.on('error', (err) => {
+          console.warn('[Multiplayer P2P] Host conn error:', err);
+        });
+      });
+
+      this.peer.on('error', (err) => {
+        console.warn('[Multiplayer P2P] Client peer error:', err);
+      });
+    } catch (e) {
+      console.warn('[Multiplayer P2P] Client init error:', e);
+    }
+  }
+
+  // --- HOST RELAY LOGIC ---
+  private handleHostIncomingConnection(conn: DataConnection) {
+    conn.on('open', () => {
+      conn.on('data', (raw: any) => {
+        const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (!msg || !msg.type) return;
+
+        if (msg.type === 'join') {
+          const newPlayer: PlayerData = {
+            id: conn.peer,
+            name: msg.player?.name || 'Murid',
+            avatarId: msg.player?.avatarId || 1,
+            role: msg.player?.role || 'student',
+            x: 0,
+            y: 0,
+            z: 0,
+            rotY: 0,
+            anim: 'idle'
+          };
+
+          this.clientConns.set(conn.peer, { conn, player: newPlayer });
+
+          // 1. Send welcome to this newcomer with all current players (host + clients)
+          const allPlayers: PlayerData[] = [
+            {
+              id: this.peer!.id,
+              name: this.player.name || 'Hos Bilik',
+              avatarId: this.player.avatarId || 1,
+              role: this.player.role || 'teacher',
+              x: 0,
+              y: 0,
+              z: 0,
+              rotY: 0,
+              anim: 'idle'
+            },
+            ...Array.from(this.clientConns.values()).map(c => c.player)
+          ];
+
+          conn.send({
+            type: 'welcome',
+            playerId: conn.peer,
+            players: allPlayers,
+            mode: 'individual',
+            unlockedStations: [1]
+          });
+
+          // 2. Broadcast player_joined to all other clients
+          const totalCount = this.clientConns.size + 1;
+          this.broadcastToClientsExcept(conn.peer, {
+            type: 'player_joined',
+            player: newPlayer,
+            totalCount
+          });
+
+          // 3. Notify host local UI
+          this.callbacks.onPlayerJoined(newPlayer, totalCount);
+        } else if (msg.type === 'move') {
+          const clientData = this.clientConns.get(conn.peer);
+          if (clientData) {
+            clientData.player.x = msg.x;
+            clientData.player.y = msg.y;
+            clientData.player.z = msg.z;
+            clientData.player.rotY = msg.rotY;
+            clientData.player.anim = msg.anim;
+          }
+
+          // Relay movement to all other clients
+          this.broadcastToClientsExcept(conn.peer, {
+            type: 'player_moved',
+            id: conn.peer,
+            x: msg.x,
+            y: msg.y,
+            z: msg.z,
+            rotY: msg.rotY,
+            anim: msg.anim
+          });
+
+          // Notify host local UI
+          this.callbacks.onPlayerMoved({
+            id: conn.peer,
+            x: msg.x,
+            y: msg.y,
+            z: msg.z,
+            rotY: msg.rotY,
+            anim: msg.anim
+          });
+        } else if (msg.type === 'emote') {
+          this.broadcastToClientsExcept(conn.peer, {
+            type: 'player_emote',
+            id: conn.peer,
+            emote: msg.emote
+          });
+          this.callbacks.onPlayerEmote(conn.peer, msg.emote);
+        } else if (msg.type === 'chat') {
+          const client = this.clientConns.get(conn.peer);
+          const name = client?.player.name || 'Pemain';
+          this.broadcastToClientsExcept(conn.peer, {
+            type: 'player_chat',
+            id: conn.peer,
+            text: msg.text,
+            name
+          });
+          this.callbacks.onPlayerChat(conn.peer, msg.text, name);
+        } else if (msg.type === 'teacher_control') {
+          if (msg.action === 'unlock_station') {
+            this.broadcastToClientsExcept('', {
+              type: 'class_station_unlocked',
+              stationId: msg.stationId,
+              message: `Guru telah membuka Stesen ${msg.stationId} untuk semua!`
+            });
+            this.callbacks.onClassStationUnlocked(msg.stationId, `Guru telah membuka Stesen ${msg.stationId}!`);
+          }
+        }
+      });
+
+      conn.on('close', () => {
+        this.clientConns.delete(conn.peer);
+        const total = this.clientConns.size + 1;
+        this.broadcastToClientsExcept('', {
+          type: 'player_left',
+          id: conn.peer,
+          totalCount: total
+        });
+        this.callbacks.onPlayerLeft(conn.peer, total);
+      });
+    });
+  }
+
+  private broadcastToClientsExcept(excludePeerId: string, payload: any) {
+    this.clientConns.forEach(({ conn }, peerId) => {
+      if (peerId !== excludePeerId && conn.open) {
+        try {
+          conn.send(payload);
+        } catch (e) {
+          console.warn('[Multiplayer P2P] Send error:', e);
+        }
+      }
+    });
+  }
+
+  // --- MESSAGE DISPATCHER ---
   private handleMessage(msg: any) {
+    if (!msg || !msg.type) return;
+
     switch (msg.type) {
       case 'welcome':
         this.callbacks.onWelcome(msg);
@@ -92,9 +403,27 @@ export class MultiplayerService {
     }
   }
 
+  // --- OUTGOING ACTIONS ---
   public sendMove(x: number, y: number, z: number, rotY: number, anim: PlayerAnim) {
-    if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
-      this.send({
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendWS({ type: 'move', x, y, z, rotY, anim });
+      return;
+    }
+
+    if (this.isHost && this.peer) {
+      // Host broadcasts own movement to all connected peers
+      this.broadcastToClientsExcept('', {
+        type: 'player_moved',
+        id: this.peer.id,
+        x,
+        y,
+        z,
+        rotY,
+        anim
+      });
+    } else if (this.hostConn && this.hostConn.open) {
+      // Client sends move to Host
+      this.hostConn.send({
         type: 'move',
         x,
         y,
@@ -106,26 +435,61 @@ export class MultiplayerService {
   }
 
   public sendEmote(emote: string) {
-    if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
-      this.send({
-        type: 'emote',
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendWS({ type: 'emote', emote });
+      return;
+    }
+
+    if (this.isHost && this.peer) {
+      this.broadcastToClientsExcept('', {
+        type: 'player_emote',
+        id: this.peer.id,
         emote
       });
+    } else if (this.hostConn && this.hostConn.open) {
+      this.hostConn.send({ type: 'emote', emote });
     }
   }
 
   public sendChat(text: string) {
-    if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
-      this.send({
-        type: 'chat',
-        text
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendWS({ type: 'chat', text });
+      return;
+    }
+
+    const myName = this.player.name || 'Pemain';
+    if (this.isHost && this.peer) {
+      this.broadcastToClientsExcept('', {
+        type: 'player_chat',
+        id: this.peer.id,
+        text,
+        name: myName
       });
+    } else if (this.hostConn && this.hostConn.open) {
+      this.hostConn.send({ type: 'chat', text });
     }
   }
 
   public sendTeacherUnlock(stationId: number) {
-    if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
-      this.send({
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendWS({
+        type: 'teacher_control',
+        action: 'unlock_station',
+        stationId
+      });
+      return;
+    }
+
+    const payload = {
+      type: 'class_station_unlocked',
+      stationId,
+      message: `Guru telah membuka Stesen ${stationId} untuk semua!`
+    };
+
+    if (this.isHost) {
+      this.broadcastToClientsExcept('', payload);
+    } else if (this.hostConn && this.hostConn.open) {
+      this.hostConn.send({
         type: 'teacher_control',
         action: 'unlock_station',
         stationId
@@ -134,8 +498,22 @@ export class MultiplayerService {
   }
 
   public sendTeacherMode(mode: 'individual' | 'class') {
-    if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
-      this.send({
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendWS({
+        type: 'teacher_control',
+        action: 'set_mode',
+        mode
+      });
+      return;
+    }
+
+    if (this.isHost) {
+      this.broadcastToClientsExcept('', {
+        type: 'mode_change',
+        mode
+      });
+    } else if (this.hostConn && this.hostConn.open) {
+      this.hostConn.send({
         type: 'teacher_control',
         action: 'set_mode',
         mode
@@ -143,20 +521,36 @@ export class MultiplayerService {
     }
   }
 
-  private send(data: object) {
+  private sendWS(data: object) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
     }
   }
 
   public disconnect() {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-    }
+    if (this.wsTimeoutId) clearTimeout(this.wsTimeoutId);
+
     if (this.ws) {
-      this.ws.close();
+      try { this.ws.close(); } catch {}
       this.ws = null;
     }
+
+    if (this.hostConn) {
+      try { this.hostConn.close(); } catch {}
+      this.hostConn = null;
+    }
+
+    this.clientConns.forEach(({ conn }) => {
+      try { conn.close(); } catch {}
+    });
+    this.clientConns.clear();
+
+    if (this.peer) {
+      try { this.peer.destroy(); } catch {}
+      this.peer = null;
+    }
+
     this.isConnected = false;
+    this.isHost = false;
   }
 }
