@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AVATARS, AvatarDefinition } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
-import { Volume2, VolumeX, Music, HelpCircle, Info, Sparkles, User, ShieldCheck, Compass, ArrowRight } from 'lucide-react';
+import { TeacherPasscodeModal } from './TeacherPasscodeModal';
+import { Volume2, VolumeX, Music, HelpCircle, Info, Sparkles, User, ShieldCheck, Compass, ArrowRight, Lock } from 'lucide-react';
 
 interface MainMenuProps {
   onStartAdventure: (data: {
@@ -26,6 +27,15 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
   const [emailError, setEmailError] = useState<string>('');
   const [isAvatarBound, setIsAvatarBound] = useState<boolean>(false);
 
+  const [isTeacherUnlocked, setIsTeacherUnlocked] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('music_realms_teacher_unlocked_7770') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [showTeacherPasscodeModal, setShowTeacherPasscodeModal] = useState<boolean>(false);
+
   const [selectedAvatarId, setSelectedAvatarId] = useState<number>(() => {
     try {
       const savedEmail = (localStorage.getItem('music_realms_last_email') || '').trim().toLowerCase();
@@ -33,7 +43,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
         const storedAvatar = localStorage.getItem(`music_realms_user_avatar_${savedEmail}`);
         if (storedAvatar) {
           const num = parseInt(storedAvatar, 10);
-          if (num >= 1 && num <= 5) return num;
+          if (num >= 1 && num <= 6) return num;
         }
       }
     } catch {}
@@ -81,8 +91,13 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
       const stored = localStorage.getItem(`music_realms_user_avatar_${cleanEmail}`);
       if (stored) {
         const id = parseInt(stored, 10);
-        if (id >= 1 && id <= 5) {
-          setSelectedAvatarId(id);
+        if (id >= 1 && id <= 6) {
+          if (id === 6 && !isTeacherUnlocked) {
+            setSelectedAvatarId(1);
+          } else {
+            setSelectedAvatarId(id);
+            if (id === 6) setRole('teacher');
+          }
           setIsAvatarBound(true);
           return;
         }
@@ -91,20 +106,64 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
     } catch {
       setIsAvatarBound(false);
     }
-  }, [email]);
+  }, [email, isTeacherUnlocked]);
 
   useEffect(() => {
     // Listen for Enter key to start adventure
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && !showHowToPlay && !showAbout) {
+      if (e.key === 'Enter' && !showHowToPlay && !showAbout && !showTeacherPasscodeModal) {
         handleStart();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedAvatarId, playerName, email, roomCode, role, showHowToPlay, showAbout]);
+  }, [selectedAvatarId, playerName, email, roomCode, role, showHowToPlay, showAbout, showTeacherPasscodeModal, isTeacherUnlocked]);
+
+  const handleSelectAvatar = (avatar: AvatarDefinition) => {
+    soundEngine.playButtonClick();
+    if (avatar.id === 6 || avatar.isTeacherOnly) {
+      if (!isTeacherUnlocked) {
+        setShowTeacherPasscodeModal(true);
+        return;
+      }
+      setRole('teacher');
+    }
+    setSelectedAvatarId(avatar.id);
+  };
+
+  const handleSelectRole = (newRole: 'student' | 'teacher') => {
+    soundEngine.playButtonClick();
+    if (newRole === 'teacher') {
+      if (!isTeacherUnlocked) {
+        setShowTeacherPasscodeModal(true);
+        return;
+      }
+      setRole('teacher');
+      setSelectedAvatarId(6);
+    } else {
+      setRole('student');
+      if (selectedAvatarId === 6) {
+        setSelectedAvatarId(1);
+      }
+    }
+  };
+
+  const handleTeacherPasscodeSuccess = () => {
+    try {
+      localStorage.setItem('music_realms_teacher_unlocked_7770', 'true');
+    } catch {}
+    setIsTeacherUnlocked(true);
+    setRole('teacher');
+    setSelectedAvatarId(6);
+    setShowTeacherPasscodeModal(false);
+  };
 
   const handleStart = () => {
+    if (selectedAvatarId === 6 && !isTeacherUnlocked) {
+      setShowTeacherPasscodeModal(true);
+      return;
+    }
+
     const cleanEmail = email.trim().toLowerCase();
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -125,7 +184,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
     const cleanName = playerName.trim() || cleanEmail.split('@')[0] || 'Pengembara Muzik';
     const cleanRoom = roomCode.trim().toUpperCase() || 'REALM-101';
 
-    // Strictly bind this avatar to this email so reloads and re-entries automatically resume it
+    // Save avatar choice for this email so player can resume cleanly
     try {
       localStorage.setItem(`music_realms_user_avatar_${cleanEmail}`, String(selectedAvatarId));
       localStorage.setItem('music_realms_last_email', cleanEmail);
@@ -277,48 +336,66 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
         <div className="w-full space-y-3">
           <div className="flex items-center justify-between px-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <User className="w-4 h-4 text-pink-400" /> Pilih Watak Avatar Anda (5 Pilihan):
+              <User className="w-4 h-4 text-pink-400" /> Pilih Watak Avatar Anda (Pelbagai Pilihan Termasuk Avatar Glowing Guru):
             </span>
-            <span className="text-xs font-semibold text-pink-300">
+            <span className="text-xs font-semibold text-pink-300 flex items-center gap-1">
+              {selectedAvatar.isTeacherOnly && <span>👑</span>}
               {selectedAvatar.title}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {AVATARS.map(avatar => {
               const isSelected = avatar.id === selectedAvatarId;
+              const isTeacher = avatar.isTeacherOnly;
+              const isLocked = isTeacher && !isTeacherUnlocked;
               return (
                 <button
                   key={avatar.id}
-                  onClick={() => {
-                    soundEngine.playButtonClick();
-                    setSelectedAvatarId(avatar.id);
-                  }}
-                  className={`group relative flex flex-col items-center p-3 rounded-2xl border-2 transition-all active:scale-95 text-center ${
-                    isSelected
-                      ? 'bg-slate-800/95 border-pink-400 shadow-xl shadow-pink-500/20 scale-105'
-                      : 'bg-slate-900/70 border-slate-700/60 hover:border-slate-500 opacity-80 hover:opacity-100'
+                  onClick={() => handleSelectAvatar(avatar)}
+                  className={`group relative flex flex-col items-center p-3 rounded-2xl border-2 transition-all active:scale-95 text-center cursor-pointer ${
+                    isTeacher
+                      ? isSelected
+                        ? 'bg-amber-950/80 border-amber-300 shadow-xl shadow-amber-500/40 ring-2 ring-amber-400/50 scale-105'
+                        : 'bg-gradient-to-b from-amber-950/40 to-slate-900/80 border-amber-500/60 hover:border-amber-400 shadow-md shadow-amber-900/30'
+                      : isSelected
+                        ? 'bg-slate-800/95 border-pink-400 shadow-xl shadow-pink-500/20 scale-105'
+                        : 'bg-slate-900/70 border-slate-700/60 hover:border-slate-500 opacity-80 hover:opacity-100'
                   }`}
                 >
+                  {/* Glowing / Special Badges */}
+                  {isTeacher && (
+                    <div className="absolute -top-2 inset-x-2 flex justify-center z-10">
+                      <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 text-[9px] font-black tracking-wider uppercase shadow-md flex items-center gap-1">
+                        {isLocked ? '🔒 KHAS GURU' : '👑 GURU GLOW'}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Avatar Icon Badge */}
                   <div
-                    className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-inner mb-2 transition-transform group-hover:scale-110"
+                    className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-inner mb-2 transition-transform group-hover:scale-110 relative ${
+                      isTeacher ? 'ring-2 ring-amber-400/70 shadow-lg shadow-amber-500/30 bg-amber-500/20' : ''
+                    }`}
                     style={{ backgroundColor: `${avatar.primaryColor}33`, borderColor: avatar.primaryColor, borderWidth: '2px' }}
                   >
                     <span>{avatar.emoji}</span>
+                    {isTeacher && (
+                      <span className="absolute -top-1.5 -right-1.5 text-xs animate-bounce">✨</span>
+                    )}
                   </div>
 
-                  <div className="text-sm font-bold font-['Fredoka'] text-white">
+                  <div className={`text-sm font-bold font-['Fredoka'] ${isTeacher ? 'text-amber-200' : 'text-white'}`}>
                     {avatar.name.split(' ')[0]}
                   </div>
 
-                  <div className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
+                  <div className={`text-[10px] line-clamp-1 mt-0.5 ${isTeacher ? 'text-amber-300/80 font-semibold' : 'text-slate-400'}`}>
                     {avatar.instrument}
                   </div>
 
                   {/* Active selection dot */}
                   {isSelected && (
-                    <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-pink-500 border-2 border-slate-950 flex items-center justify-center text-[10px] font-black text-white shadow-md">
+                    <div className="absolute -bottom-1.5 -right-1.5 w-5 h-5 rounded-full bg-pink-500 border-2 border-slate-950 flex items-center justify-center text-[10px] font-black text-white shadow-md">
                       ✓
                     </div>
                   )}
@@ -436,13 +513,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    soundEngine.playButtonClick();
-                    setRole('student');
-                  }}
-                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                  onClick={() => handleSelectRole('student')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                     role === 'student'
-                      ? 'bg-emerald-600/40 border-emerald-400 text-emerald-200'
+                      ? 'bg-emerald-600/40 border-emerald-400 text-emerald-200 shadow-md shadow-emerald-900/30'
                       : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
                   }`}
                 >
@@ -450,17 +524,15 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    soundEngine.playButtonClick();
-                    setRole('teacher');
-                  }}
-                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                  onClick={() => handleSelectRole('teacher')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     role === 'teacher'
-                      ? 'bg-indigo-600/40 border-indigo-400 text-indigo-200'
+                      ? 'bg-amber-600/40 border-amber-400 text-amber-200 shadow-md shadow-amber-900/40'
                       : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
                   }`}
                 >
-                  🎓 Guru
+                  <span>👑 Guru</span>
+                  {!isTeacherUnlocked && <span className="text-[10px] text-amber-400">🔒 Khas Guru</span>}
                 </button>
               </div>
             </div>
@@ -576,6 +648,15 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
           </div>
         </div>
       )}
+
+      {/* Teacher Passcode Modal */}
+      <TeacherPasscodeModal
+        isOpen={showTeacherPasscodeModal}
+        onSuccess={handleTeacherPasscodeSuccess}
+        onClose={() => setShowTeacherPasscodeModal(false)}
+        title="Pengesahan Akses Guru"
+        description="Sila masukkan kod keselamatan guru untuk membuka Avatar Glowing Diraja Guru dan peranan Guru."
+      />
     </div>
   );
 };

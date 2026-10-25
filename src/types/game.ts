@@ -30,6 +30,7 @@ export interface AvatarDefinition {
   accessory: string;
   instrument: string;
   emoji: string;
+  isTeacherOnly?: boolean;
 }
 
 export const AVATARS: AvatarDefinition[] = [
@@ -97,6 +98,20 @@ export const AVATARS: AvatarDefinition[] = [
     accessory: "Zirah Emas Berkilau",
     instrument: "Seruling Suria Emas",
     emoji: "👑"
+  },
+  {
+    id: 6,
+    name: "Cikgu Maestro Aurora",
+    title: "Maestro Diraja Cahaya Guru (Glowing)",
+    description: "Avatar rasmi Guru Pendidikan Muzik dengan aura glowing neon keemasan, jubah aurora bersinar terang, halo bercahaya dan mahkota permata.",
+    primaryColor: "#fbbf24", // Glowing Brilliant Gold
+    secondaryColor: "#06b6d4", // Glowing Cyan
+    accentColor: "#f43f5e", // Glowing Neon Rose
+    headwear: "Mahkota Cahaya Suria",
+    accessory: "Jubah Glowing Aurora & Halo Bersinar",
+    instrument: "Tongkat Klef Diraja Guru",
+    emoji: "👑✨",
+    isTeacherOnly: true
   }
 ];
 

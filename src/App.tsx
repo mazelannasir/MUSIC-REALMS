@@ -116,8 +116,9 @@ export default function App() {
           setUnlockedStations(prev => Array.from(new Set([...prev, ...welcomeData.unlockedStations])));
           worldRef.current?.updateUnlockedStations(welcomeData.unlockedStations);
         }
-        // Spawn existing remote players
+        // Spawn existing remote players (excluding self)
         welcomeData.players.forEach(p => {
+          if (p.id === welcomeData.playerId) return;
           worldRef.current?.updateRemotePlayer(p.id, {
             name: p.name,
             email: p.email,
@@ -132,6 +133,7 @@ export default function App() {
       },
       onPlayerJoined: (player, total) => {
         setOnlineCount(total);
+        if (player.id === mp.getMyPlayerId()) return;
         showToast(`${player.name} telah memasuki Music Realms! ✨`, 'info');
         worldRef.current?.updateRemotePlayer(player.id, {
           name: player.name,
@@ -145,6 +147,7 @@ export default function App() {
         });
       },
       onPlayerMoved: (moveData) => {
+        if (moveData.id === mp.getMyPlayerId()) return;
         worldRef.current?.updateRemotePlayer(moveData.id, moveData as any);
       },
       onPlayerLeft: (id, total) => {

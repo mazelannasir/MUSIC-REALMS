@@ -1250,8 +1250,10 @@ export class MusicWorld {
   }
 
   // --- Rigged Humanoid Avatar Assembly with Jointed Limbs ---
+  // --- Rigged Humanoid Avatar Assembly with Jointed Limbs ---
   private createRiggedHumanoid(avatarId: number, name: string, isLocalPlayer: boolean): AvatarRig {
     const avatar = AVATARS.find(a => a.id === avatarId) || AVATARS[0];
+    const isGlowingTeacher = avatar.id === 6 || avatar.isTeacherOnly === true;
     const root = new THREE.Group();
 
     // Hips / Pelvis
@@ -1263,7 +1265,13 @@ export class MusicWorld {
     const torso = new THREE.Group();
     const torsoMesh = new THREE.Mesh(
       new THREE.CylinderGeometry(0.38, 0.46, 0.9, 12),
-      new THREE.MeshStandardMaterial({ color: avatar.primaryColor, roughness: 0.45, metalness: 0.2 })
+      new THREE.MeshStandardMaterial({
+        color: avatar.primaryColor,
+        roughness: isGlowingTeacher ? 0.2 : 0.45,
+        metalness: isGlowingTeacher ? 0.4 : 0.2,
+        emissive: isGlowingTeacher ? new THREE.Color(0xfacc15) : new THREE.Color(0x000000),
+        emissiveIntensity: isGlowingTeacher ? 0.85 : 0
+      })
     );
     torsoMesh.position.y = 0.45;
     torsoMesh.castShadow = true;
@@ -1272,7 +1280,12 @@ export class MusicWorld {
     // Vest / Belt accent
     const belt = new THREE.Mesh(
       new THREE.CylinderGeometry(0.48, 0.48, 0.16, 12),
-      new THREE.MeshStandardMaterial({ color: avatar.secondaryColor, roughness: 0.4 })
+      new THREE.MeshStandardMaterial({
+        color: avatar.secondaryColor,
+        roughness: 0.4,
+        emissive: isGlowingTeacher ? new THREE.Color(0x06b6d4) : new THREE.Color(0x000000),
+        emissiveIntensity: isGlowingTeacher ? 0.8 : 0
+      })
     );
     belt.position.y = 0.1;
     torso.add(belt);
@@ -1299,30 +1312,93 @@ export class MusicWorld {
       head.add(eye);
     });
 
-    // Hat / Hair
-    const hat = new THREE.Mesh(
-      new THREE.ConeGeometry(0.48, 0.65, 12),
-      new THREE.MeshStandardMaterial({ color: avatar.secondaryColor, roughness: 0.4, metalness: 0.3 })
-    );
-    hat.position.set(0, 0.42, -0.04);
-    hat.rotation.x = -0.15;
-    head.add(hat);
+    if (isGlowingTeacher) {
+      // 1. Radiant Glowing Crown
+      const crown = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.44, 0.46, 0.22, 16),
+        new THREE.MeshStandardMaterial({
+          color: 0xfacc15,
+          emissive: 0xfacc15,
+          emissiveIntensity: 0.95,
+          roughness: 0.2,
+          metalness: 0.8
+        })
+      );
+      crown.position.set(0, 0.42, 0);
+      head.add(crown);
 
-    // Musical Feather / Treble Pin
-    const pin = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.16, 0),
-      new THREE.MeshStandardMaterial({ color: avatar.accentColor, emissive: avatar.accentColor, emissiveIntensity: 0.5 })
-    );
-    pin.position.set(0.32, 0.38, 0.1);
-    head.add(pin);
+      // Crown Jewels & Spikes
+      for (let i = 0; i < 5; i++) {
+        const angle = (i / 5) * Math.PI * 2;
+        const spike = new THREE.Mesh(
+          new THREE.ConeGeometry(0.08, 0.28, 8),
+          new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0xfacc15 : 0x06b6d4 })
+        );
+        spike.position.set(Math.sin(angle) * 0.43, 0.6, Math.cos(angle) * 0.43);
+        head.add(spike);
+      }
+
+      // 2. Floating Celestial Halo
+      const halo = new THREE.Mesh(
+        new THREE.TorusGeometry(0.55, 0.045, 12, 32),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+      );
+      halo.rotation.x = Math.PI / 2;
+      halo.position.set(0, 0.82, 0);
+      head.add(halo);
+
+      // 3. Glowing Aurora Wings behind Torso
+      [-1, 1].forEach(dir => {
+        const wing = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.8, 1.25),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.92, side: THREE.DoubleSide })
+        );
+        wing.position.set(dir * 0.5, 0.55, -0.32);
+        wing.rotation.set(0.15, dir * 0.45, dir * 0.3);
+        torso.add(wing);
+
+        const wingGlow = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.65, 1.0),
+          new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.88, side: THREE.DoubleSide })
+        );
+        wingGlow.position.set(dir * 0.45, 0.55, -0.33);
+        wingGlow.rotation.set(0.15, dir * 0.45, dir * 0.3);
+        torso.add(wingGlow);
+      });
+    } else {
+      // Regular Student Hat / Hair
+      const hat = new THREE.Mesh(
+        new THREE.ConeGeometry(0.48, 0.65, 12),
+        new THREE.MeshStandardMaterial({ color: avatar.secondaryColor, roughness: 0.4, metalness: 0.3 })
+      );
+      hat.position.set(0, 0.42, -0.04);
+      hat.rotation.x = -0.15;
+      head.add(hat);
+
+      // Musical Feather / Treble Pin
+      const pin = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.16, 0),
+        new THREE.MeshStandardMaterial({ color: avatar.accentColor, emissive: avatar.accentColor, emissiveIntensity: 0.5 })
+      );
+      pin.position.set(0.32, 0.38, 0.1);
+      head.add(pin);
+    }
+
     torso.add(head);
 
     // Arms: Shoulders, Upper Arms, Forearms & Hands
+    const armMat = new THREE.MeshStandardMaterial({
+      color: avatar.primaryColor,
+      roughness: 0.5,
+      emissive: isGlowingTeacher ? new THREE.Color(0xfacc15) : new THREE.Color(0x000000),
+      emissiveIntensity: isGlowingTeacher ? 0.6 : 0
+    });
+
     const leftUpperArm = new THREE.Group();
     leftUpperArm.position.set(-0.52, 0.8, 0);
     const leftArmMesh = new THREE.Mesh(
       new THREE.CylinderGeometry(0.12, 0.11, 0.45, 8),
-      new THREE.MeshStandardMaterial({ color: avatar.primaryColor, roughness: 0.5 })
+      armMat
     );
     leftArmMesh.position.y = -0.22;
     leftUpperArm.add(leftArmMesh);
@@ -1558,21 +1634,22 @@ export class MusicWorld {
     let textStartX = 192;
     if (badge) {
       ctx.fillStyle = badgeBg;
-      ctx.roundRect(24, 24, 60, 48, 24);
+      ctx.roundRect(24, 24, 76, 48, 24);
       ctx.fill();
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 20px Fredoka, sans-serif';
+      ctx.font = 'bold 18px Fredoka, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(badge, 54, 48);
-      textStartX = 220;
+      ctx.fillText(badge, 62, 48);
+      textStartX = 230;
     }
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 28px Fredoka, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(name.slice(0, 14), textStartX, 48);
+    const safeName = (name || 'Pengembara').slice(0, 14);
+    ctx.fillText(safeName, textStartX, 48);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -1599,61 +1676,53 @@ export class MusicWorld {
   }
 
   // --- Remote Multiplayer Sync ---
-  public updateRemotePlayer(id: string, data: { name: string; avatarId: number; email?: string; x: number; y: number; z: number; rotY: number; anim: PlayerAnim }) {
-    const cleanEmail = (data.email || '').trim().toLowerCase();
-
-    // 1. Deduplication by email: If an avatar already exists for this email under a previous ID, remove it!
-    if (cleanEmail) {
-      for (const [existingId, rp] of this.remotePlayers.entries()) {
-        if (existingId !== id && rp.email && rp.email.trim().toLowerCase() === cleanEmail) {
-          this.scene.remove(rp.rig.root);
-          this.remotePlayers.delete(existingId);
-          break;
-        }
-      }
-    }
-
+  public updateRemotePlayer(id: string, data: { name?: string; avatarId?: number; email?: string; x: number; y: number; z: number; rotY: number; anim: PlayerAnim }) {
+    if (!id) return;
     let p = this.remotePlayers.get(id);
+
     if (!p) {
-      const rig = this.createRiggedHumanoid(data.avatarId, data.name, false);
+      const avatarId = typeof data.avatarId === 'number' ? data.avatarId : 1;
+      const name = data.name || 'Pengembara';
+      const rig = this.createRiggedHumanoid(avatarId, name, false);
       rig.root.position.set(data.x, data.y, data.z);
       rig.root.rotation.y = data.rotY;
       this.scene.add(rig.root);
+
       p = {
         rig,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
         targetRotY: data.rotY,
-        anim: data.anim,
+        anim: data.anim || 'idle',
         walkCycle: 0,
-        email: cleanEmail,
-        avatarId: data.avatarId,
-        name: data.name
+        email: data.email,
+        avatarId: avatarId,
+        name: name
       };
       this.remotePlayers.set(id, p);
     } else {
-      // If player changed avatar definition, replace rig seamlessly
-      if (p.avatarId !== data.avatarId) {
+      // ONLY replace rig if an explicit and different avatarId number is provided!
+      if (typeof data.avatarId === 'number' && data.avatarId !== p.avatarId) {
         this.scene.remove(p.rig.root);
-        const newRig = this.createRiggedHumanoid(data.avatarId, data.name, false);
+        const newRig = this.createRiggedHumanoid(data.avatarId, data.name || p.name, false);
         newRig.root.position.copy(p.rig.root.position);
         newRig.root.rotation.y = p.rig.root.rotation.y;
         this.scene.add(newRig.root);
         p.rig = newRig;
         p.avatarId = data.avatarId;
-        p.name = data.name;
       }
-      p.email = cleanEmail || p.email;
+      if (data.name) p.name = data.name;
+      if (data.email) p.email = data.email;
     }
 
-    // If remote player teleported or moved long distance (>12 units), snap instantly
+    // Direct snap if moved distance is unusually large (>18 units, e.g. teleport)
     const currDist = p.rig.root.position.distanceTo(p.targetPos);
-    if (currDist > 12) {
+    if (currDist > 18) {
       p.rig.root.position.set(data.x, data.y, data.z);
     }
 
     p.targetPos.set(data.x, data.y, data.z);
     p.targetRotY = data.rotY;
-    p.anim = data.anim;
+    if (data.anim) p.anim = data.anim;
   }
 
   public removeRemotePlayer(id: string) {
@@ -2011,11 +2080,7 @@ export class MusicWorld {
 
       rp.walkCycle += dt * (rp.anim === 'walk' ? 11 : 2.5);
 
-      // LOD check: only update full humanoid bone matrices if player is within view range (<50 units)
-      const distToPlayer = this.playerPos.distanceTo(rp.rig.root.position);
-      if (distToPlayer < 50) {
-        this.updateHumanoidKinematics(rp.rig, rp.anim, rp.walkCycle, dt);
-      }
+      this.updateHumanoidKinematics(rp.rig, rp.anim, rp.walkCycle, dt);
     }
 
     // 5. Broadcast Local Movement to WebSocket

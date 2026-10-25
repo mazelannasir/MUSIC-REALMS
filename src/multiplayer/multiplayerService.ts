@@ -603,6 +603,10 @@ export class MultiplayerService {
     }
   }
 
+  public getMyPlayerId(): string {
+    return this.myPlayerId;
+  }
+
   public disconnect() {
     if (this.wsTimeoutId) clearTimeout(this.wsTimeoutId);
 
