@@ -160,7 +160,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
   const selectedAvatar = AVATARS.find(a => a.id === selectedAvatarId) || AVATARS[0];
 
   return (
-    <div className="relative min-h-screen w-full flex flex-col items-center justify-between p-4 sm:p-8 bg-gradient-to-b from-[#130d2d] via-[#1e1346] to-[#0c081e] text-white overflow-x-hidden select-none">
+    <div className="relative min-h-full w-full flex flex-col items-center justify-between p-4 sm:p-8 bg-gradient-to-b from-[#130d2d] via-[#1e1346] to-[#0c081e] text-white overflow-x-hidden touch-pan-y">
       {/* Ambient Celestial Glows */}
       <div className="absolute top-10 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
@@ -253,7 +253,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
       </header>
 
       {/* Main Center Content */}
-      <main className="relative z-10 w-full max-w-4xl my-auto py-6 flex flex-col items-center gap-6">
+      <main className="relative z-10 w-full max-w-4xl py-4 sm:py-6 flex flex-col items-center gap-5 sm:gap-6 flex-1">
         {/* Title Lockup with Bespoke SVG & Neon Glow */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-indigo-500/20 border border-purple-400/40 text-xs font-bold text-pink-300 uppercase tracking-widest shadow-inner">
@@ -468,7 +468,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
         </div>
 
         {/* Start Adventure Big CTA */}
-        <div className="w-full flex flex-col items-center gap-2 pt-2">
+        <div id="start-adventure-cta" className="w-full flex flex-col items-center gap-2.5 pt-4 pb-8 sm:pb-4">
           <button
             onClick={handleStart}
             className="group relative w-full sm:w-auto min-w-[320px] px-8 py-4 rounded-2xl bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 hover:from-pink-400 hover:via-purple-500 hover:to-indigo-500 text-white font-black font-['Fredoka'] text-xl tracking-wide shadow-2xl shadow-purple-600/40 hover:shadow-purple-500/60 hover:scale-102 active:scale-98 transition-all flex items-center justify-center gap-3 cursor-pointer"
@@ -478,11 +478,26 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
             <ArrowRight className="w-6 h-6 group-hover:translate-x-1.5 transition-transform" />
           </button>
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 text-center">
             Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-200 font-mono">ENTER</kbd> atau klik butang di atas untuk memulakan kembara
           </p>
         </div>
       </main>
+
+      {/* Floating Quick Scroll to Start Button (Phone / Small Screen) */}
+      <div className="fixed bottom-3 right-3 z-30 sm:hidden">
+        <button
+          type="button"
+          onClick={() => {
+            soundEngine.playButtonClick();
+            document.getElementById('start-adventure-cta')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-pink-600/90 hover:bg-pink-500 backdrop-blur-md text-white text-[11px] font-bold shadow-lg shadow-pink-900/50 border border-pink-400/60 active:scale-95 transition-all cursor-pointer"
+        >
+          <span>👇</span>
+          <span>Ke Butang Masuk</span>
+        </button>
+      </div>
 
       {/* Flat Control Hints Footer */}
       <footer className="relative z-10 w-full max-w-5xl py-2 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 gap-2">

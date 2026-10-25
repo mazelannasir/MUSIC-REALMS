@@ -308,7 +308,7 @@ export default function App() {
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-slate-950 font-['Nunito',sans-serif]">
       {gameState === 'menu' ? (
-        <>
+        <div className="w-full h-full overflow-y-auto overflow-x-hidden overscroll-y-contain scroll-smooth touch-pan-y scroll-container">
           <MainMenu
             onStartAdventure={handleStartAdventure}
             onOpenTeacherEditor={() => handleRequestOpenTeacherPlatform(1)}
@@ -335,7 +335,7 @@ export default function App() {
               onClose={() => setShowInviteModal(false)}
             />
           )}
-        </>
+        </div>
       ) : (
         <div className="relative w-full h-full">
           {/* 3D WebGL Canvas Container */}

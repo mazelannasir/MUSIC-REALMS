@@ -13,6 +13,11 @@
     font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
 
+  .scroll-container {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
   /* Custom scrollbar for learning dialogs */
   ::-webkit-scrollbar {
     width: 6px;
