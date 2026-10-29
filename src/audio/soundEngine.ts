@@ -398,6 +398,30 @@ class SoundEngine {
     osc.start(now);
     osc.stop(now + 0.28);
   }
+
+  public playGathering() {
+    if (!this.isSfxEnabled) return;
+    this.initContext();
+    if (!this.ctx || !this.sfxVolumeNode) return;
+
+    const now = this.ctx.currentTime;
+    // Celestial harp arpeggio ascending rapidly (C5, E5, G5, B5, C6, E6)
+    const notes = [523.25, 659.25, 783.99, 987.77, 1046.50, 1318.51];
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+
+      gain.gain.setValueAtTime(0.18, now + idx * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.9);
+
+      osc.connect(gain);
+      gain.connect(this.sfxVolumeNode!);
+      osc.start(now + idx * 0.08);
+      osc.stop(now + idx * 0.08 + 0.95);
+    });
+  }
 }
 
 export const soundEngine = new SoundEngine();

@@ -14,9 +14,10 @@ interface MainMenuProps {
   }) => void;
   onOpenTeacherEditor?: () => void;
   onOpenInvite?: (roomCode: string) => void;
+  initialRoomCode?: string;
 }
 
-export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeacherEditor, onOpenInvite }) => {
+export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeacherEditor, onOpenInvite, initialRoomCode }) => {
   const [email, setEmail] = useState<string>(() => {
     try {
       return localStorage.getItem('music_realms_last_email') || '';
@@ -59,10 +60,14 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
   });
 
   const [roomCode, setRoomCode] = useState<string>(() => {
+    if (initialRoomCode) return initialRoomCode.toUpperCase();
     try {
       const p = new URLSearchParams(window.location.search);
       const r = p.get('room');
-      return r ? r.toUpperCase() : 'REALM-101';
+      if (r) return r.toUpperCase();
+      const stored = sessionStorage.getItem('music_realms_session_room');
+      if (stored) return stored.toUpperCase();
+      return 'REALM-101';
     } catch {
       return 'REALM-101';
     }
@@ -184,11 +189,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
     const cleanName = playerName.trim() || cleanEmail.split('@')[0] || 'Pengembara Muzik';
     const cleanRoom = roomCode.trim().toUpperCase() || 'REALM-101';
 
-    // Save avatar choice for this email so player can resume cleanly
+    // Save avatar choice for this email and persist session room across re-entries
     try {
       localStorage.setItem(`music_realms_user_avatar_${cleanEmail}`, String(selectedAvatarId));
       localStorage.setItem('music_realms_last_email', cleanEmail);
       localStorage.setItem('music_realms_last_player_name', cleanName);
+      sessionStorage.setItem('music_realms_session_room', cleanRoom);
     } catch (e) {
       console.warn('LocalStorage save error:', e);
     }

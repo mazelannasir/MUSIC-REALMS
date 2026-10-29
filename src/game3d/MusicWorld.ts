@@ -1313,15 +1313,35 @@ export class MusicWorld {
     });
 
     if (isGlowingTeacher) {
-      // 1. Radiant Glowing Crown
+      // 1. Dynamic PointLight physically illuminating surroundings
+      const teacherLight = new THREE.PointLight(0xfbbf24, 3.5, 16, 1.2);
+      teacherLight.position.set(0, 2.0, 0);
+      root.add(teacherLight);
+
+      // 2. Luminous Celestial Sky Beacon Pillar (Visible across the entire sky kingdom!)
+      const beaconGeo = new THREE.CylinderGeometry(0.35, 0.85, 24, 16, 1, true);
+      const beaconMat = new THREE.MeshBasicMaterial({
+        color: 0xfacc15,
+        transparent: true,
+        opacity: 0.38,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
+      beaconMesh.position.set(0, 12, 0);
+      root.add(beaconMesh);
+      this.animatedProps.push({ mesh: beaconMesh, type: 'spin', speed: 0.5, offset: 0 });
+
+      // 3. Radiant Glowing Crown
       const crown = new THREE.Mesh(
         new THREE.CylinderGeometry(0.44, 0.46, 0.22, 16),
         new THREE.MeshStandardMaterial({
           color: 0xfacc15,
           emissive: 0xfacc15,
-          emissiveIntensity: 0.95,
-          roughness: 0.2,
-          metalness: 0.8
+          emissiveIntensity: 1.1,
+          roughness: 0.15,
+          metalness: 0.85
         })
       );
       crown.position.set(0, 0.42, 0);
@@ -1331,37 +1351,46 @@ export class MusicWorld {
       for (let i = 0; i < 5; i++) {
         const angle = (i / 5) * Math.PI * 2;
         const spike = new THREE.Mesh(
-          new THREE.ConeGeometry(0.08, 0.28, 8),
+          new THREE.ConeGeometry(0.08, 0.32, 8),
           new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0xfacc15 : 0x06b6d4 })
         );
-        spike.position.set(Math.sin(angle) * 0.43, 0.6, Math.cos(angle) * 0.43);
+        spike.position.set(Math.sin(angle) * 0.43, 0.62, Math.cos(angle) * 0.43);
         head.add(spike);
       }
 
-      // 2. Floating Celestial Halo
-      const halo = new THREE.Mesh(
-        new THREE.TorusGeometry(0.55, 0.045, 12, 32),
+      // 4. Dual Celestial Floating Halos
+      const haloGold = new THREE.Mesh(
+        new THREE.TorusGeometry(0.58, 0.05, 12, 32),
+        new THREE.MeshBasicMaterial({ color: 0xfacc15 })
+      );
+      haloGold.rotation.x = Math.PI / 2;
+      haloGold.position.set(0, 0.85, 0);
+      head.add(haloGold);
+
+      const haloCyan = new THREE.Mesh(
+        new THREE.TorusGeometry(0.72, 0.04, 12, 32),
         new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
       );
-      halo.rotation.x = Math.PI / 2;
-      halo.position.set(0, 0.82, 0);
-      head.add(halo);
+      haloCyan.rotation.x = Math.PI / 2;
+      haloCyan.position.set(0, 1.05, 0);
+      head.add(haloCyan);
+      this.animatedProps.push({ mesh: haloCyan, type: 'spin', speed: -1.2, offset: 0 });
 
-      // 3. Glowing Aurora Wings behind Torso
+      // 5. Glowing Radiant Aurora Wings behind Torso
       [-1, 1].forEach(dir => {
         const wing = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.8, 1.25),
-          new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.92, side: THREE.DoubleSide })
+          new THREE.PlaneGeometry(0.9, 1.45),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
         );
-        wing.position.set(dir * 0.5, 0.55, -0.32);
+        wing.position.set(dir * 0.55, 0.58, -0.32);
         wing.rotation.set(0.15, dir * 0.45, dir * 0.3);
         torso.add(wing);
 
         const wingGlow = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.65, 1.0),
-          new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.88, side: THREE.DoubleSide })
+          new THREE.PlaneGeometry(0.75, 1.2),
+          new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
         );
-        wingGlow.position.set(dir * 0.45, 0.55, -0.33);
+        wingGlow.position.set(dir * 0.5, 0.58, -0.33);
         wingGlow.rotation.set(0.15, dir * 0.45, dir * 0.3);
         torso.add(wingGlow);
       });
@@ -1504,9 +1533,11 @@ export class MusicWorld {
     pack.position.set(0, 0.45, -0.32);
     torso.add(pack);
 
-    // Floating Nameplate
-    const nameplate = this.createNameplateSprite(name, isLocalPlayer ? 'YOU' : '', isLocalPlayer ? '#10b981' : '#3b82f6');
-    nameplate.position.set(0, 2.7, 0);
+    // Floating High-Contrast Nameplate
+    const badgeText = isGlowingTeacher ? (isLocalPlayer ? '👑 GURU (ANDA)' : '👑 GURU') : (isLocalPlayer ? '✨ ANDA' : '🎒 MURID');
+    const badgeBg = isGlowingTeacher ? '#f59e0b' : (isLocalPlayer ? '#10b981' : '#0284c7');
+    const nameplate = this.createNameplateSprite(name, badgeText, badgeBg, isGlowingTeacher);
+    nameplate.position.set(0, isGlowingTeacher ? 3.3 : 2.8, 0);
     root.add(nameplate);
 
     // Ground Contact Shadow
@@ -1621,40 +1652,57 @@ export class MusicWorld {
     }
   }
 
-  private createNameplateSprite(name: string, badge: string, badgeBg: string): THREE.Sprite {
+  private createNameplateSprite(name: string, badge: string, badgeBg: string, isGlowingTeacher: boolean = false): THREE.Sprite {
     const canvas = document.createElement('canvas');
-    canvas.width = 384;
-    canvas.height = 96;
+    canvas.width = 512;
+    canvas.height = 140;
     const ctx = canvas.getContext('2d')!;
 
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.roundRect(12, 12, 360, 72, 36);
+    // High-contrast dark obsidian card
+    ctx.fillStyle = 'rgba(8, 12, 24, 0.95)';
+    ctx.roundRect(10, 10, 492, 120, 28);
     ctx.fill();
 
-    let textStartX = 192;
+    // Border: Vibrant golden glow for Teacher, crisp cyan/emerald for Student
+    ctx.strokeStyle = isGlowingTeacher ? '#fbbf24' : '#38bdf8';
+    ctx.lineWidth = isGlowingTeacher ? 6 : 4;
+    ctx.shadowColor = isGlowingTeacher ? 'rgba(251, 191, 36, 0.7)' : 'rgba(56, 189, 248, 0.4)';
+    ctx.shadowBlur = isGlowingTeacher ? 14 : 6;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    let textStartX = 256;
     if (badge) {
+      // Role Badge pill
       ctx.fillStyle = badgeBg;
-      ctx.roundRect(24, 24, 76, 48, 24);
+      ctx.roundRect(24, 28, 140, 84, 20);
       ctx.fill();
+
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px Fredoka, sans-serif';
+      ctx.font = 'bold 22px Fredoka, Nunito, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(badge, 62, 48);
-      textStartX = 230;
+      ctx.fillText(badge, 94, 70);
+
+      textStartX = 320;
     }
 
+    // Name Text with crisp legibility & drop shadow
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 28px Fredoka, sans-serif';
+    ctx.font = 'bold 36px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
     const safeName = (name || 'Pengembara').slice(0, 14);
-    ctx.fillText(safeName, textStartX, 48);
+    ctx.fillText(safeName, textStartX, 70);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
-    sprite.scale.set(3.2, 0.8, 1);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sprite.scale.set(3.8, 1.05, 1);
     return sprite;
   }
 
@@ -1683,15 +1731,19 @@ export class MusicWorld {
     if (!p) {
       const avatarId = typeof data.avatarId === 'number' ? data.avatarId : 1;
       const name = data.name || 'Pengembara';
+      const posX = typeof data.x === 'number' && !isNaN(data.x) ? data.x : 0;
+      const posY = typeof data.y === 'number' && !isNaN(data.y) ? data.y : 1.2;
+      const posZ = typeof data.z === 'number' && !isNaN(data.z) ? data.z : 0;
+      const rotY = typeof data.rotY === 'number' && !isNaN(data.rotY) ? data.rotY : 0;
       const rig = this.createRiggedHumanoid(avatarId, name, false);
-      rig.root.position.set(data.x, data.y, data.z);
-      rig.root.rotation.y = data.rotY;
+      rig.root.position.set(posX, posY, posZ);
+      rig.root.rotation.y = rotY;
       this.scene.add(rig.root);
 
       p = {
         rig,
-        targetPos: new THREE.Vector3(data.x, data.y, data.z),
-        targetRotY: data.rotY,
+        targetPos: new THREE.Vector3(posX, posY, posZ),
+        targetRotY: rotY,
         anim: data.anim || 'idle',
         walkCycle: 0,
         email: data.email,
@@ -2168,9 +2220,57 @@ export class MusicWorld {
     }
   }
 
-  public teleportTo(x: number, z: number) {
-    this.playerPos.set(x, 0, z);
+  public teleportTo(x: number, z: number, y: number = 1.2) {
+    this.playerPos.set(x, y, z);
+    this.playerVelocityY = 0;
+    this.isGrounded = true;
     this.playerRig.root.position.copy(this.playerPos);
+    this.targetRotY = this.playerRotY;
+  }
+
+  public triggerGatheringSummonEffect(x: number, y: number, z: number) {
+    const ringGeo = new THREE.RingGeometry(0.8, 3.2, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xfacc15,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, y + 0.05, z);
+    this.scene.add(ring);
+
+    const pillarGeo = new THREE.CylinderGeometry(2.2, 2.2, 8, 16, 1, true);
+    const pillarMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+    pillar.position.set(x, y + 4, z);
+    this.scene.add(pillar);
+
+    const startTime = performance.now();
+    const interval = setInterval(() => {
+      const elapsed = (performance.now() - startTime) / 2200;
+      if (elapsed >= 1) {
+        clearInterval(interval);
+        try {
+          this.scene.remove(ring);
+          this.scene.remove(pillar);
+        } catch {}
+      } else {
+        ring.scale.set(1 + elapsed * 1.6, 1 + elapsed * 1.6, 1);
+        ringMat.opacity = 0.95 * (1 - elapsed);
+        pillarMat.opacity = 0.65 * (1 - elapsed);
+      }
+    }, 30);
   }
 
   public getPlayerPosition() {

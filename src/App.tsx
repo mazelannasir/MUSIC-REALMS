@@ -16,6 +16,23 @@ import { Bell, AlertCircle, Sparkles } from 'lucide-react';
 
 export default function App() {
   const [gameState, setGameState] = useState<'menu' | 'playing'>('menu');
+  const [activeRoomCode, setActiveRoomCode] = useState<string>(() => {
+    try {
+      const urlRoom = new URLSearchParams(window.location.search).get('room');
+      if (urlRoom) {
+        sessionStorage.setItem('music_realms_session_room', urlRoom.toUpperCase());
+        return urlRoom.toUpperCase();
+      }
+      const stored = sessionStorage.getItem('music_realms_session_room');
+      if (stored) return stored.toUpperCase();
+      const fresh = 'REALM-' + Math.floor(100 + Math.random() * 900);
+      sessionStorage.setItem('music_realms_session_room', fresh);
+      return fresh;
+    } catch {
+      return 'REALM-101';
+    }
+  });
+
   const [playerProfile, setPlayerProfile] = useState<{
     avatarId: number;
     playerName: string;
@@ -88,18 +105,6 @@ export default function App() {
     }, 4000);
   };
 
-  // Start adventure from Main Menu
-  const handleStartAdventure = (data: {
-    avatarId: number;
-    playerName: string;
-    email: string;
-    roomCode: string;
-    role: 'student' | 'teacher';
-  }) => {
-    setPlayerProfile(data);
-    setGameState('playing');
-  };
-
   // Mount 3D Scene & Multiplayer when gameState becomes 'playing'
   useEffect(() => {
     if (gameState !== 'playing') return;
@@ -169,6 +174,21 @@ export default function App() {
         });
         showToast(msg, 'success');
         soundEngine.playStationUnlock();
+      },
+      onTeacherGathering: (data) => {
+        // If this client is a student (or not the summoning teacher), teleport to the teacher!
+        if (data.teacherId !== mp.getMyPlayerId()) {
+          const angle = Math.random() * Math.PI * 2;
+          const radius = 2.2 + Math.random() * 2.0;
+          const targetX = (data.x || 0) + Math.cos(angle) * radius;
+          const targetZ = (data.z || 0) + Math.sin(angle) * radius;
+          const targetY = typeof data.y === 'number' && !isNaN(data.y) ? data.y : 1.2;
+
+          worldRef.current?.teleportTo(targetX, targetZ, targetY);
+          worldRef.current?.triggerGatheringSummonEffect(targetX, targetY, targetZ);
+          soundEngine.playGathering();
+          showToast(`👑 Cikgu ${data.teacherName} telah menggunakan Kuasa Gathering! Anda telah dihimpunkan bersama guru! ✨`, 'success');
+        }
       },
       onError: (code, msg) => {
         showToast(msg, 'warning');
@@ -274,6 +294,28 @@ export default function App() {
     worldRef.current?.triggerEmoteAnim(anim);
   };
 
+  const handleStartAdventure = (profile: {
+    avatarId: number;
+    playerName: string;
+    email: string;
+    roomCode: string;
+    role: 'student' | 'teacher';
+  }) => {
+    setActiveRoomCode(profile.roomCode);
+    try {
+      sessionStorage.setItem('music_realms_session_room', profile.roomCode);
+    } catch {}
+    setPlayerProfile(profile);
+    setGameState('playing');
+  };
+
+  const handleTeacherGathering = () => {
+    const pos = worldRef.current?.getPlayerPosition() || { x: 0, z: 0 };
+    soundEngine.playGathering();
+    mpServiceRef.current?.sendTeacherGathering(playerProfile.playerName, pos.x, 1.2, pos.z);
+    showToast('✨ Kuasa Gathering Diaktifkan! Semua murid dihimpunkan ke posisi anda!', 'success');
+  };
+
   const handleChangeCamera = (view: 'follow' | 'top' | 'cinematic') => {
     worldRef.current?.setCameraView(view);
   };
@@ -313,6 +355,7 @@ export default function App() {
       {gameState === 'menu' ? (
         <div className="w-full h-full overflow-y-auto overflow-x-hidden overscroll-y-contain scroll-smooth touch-pan-y scroll-container">
           <MainMenu
+            initialRoomCode={activeRoomCode}
             onStartAdventure={handleStartAdventure}
             onOpenTeacherEditor={() => handleRequestOpenTeacherPlatform(1)}
             onOpenInvite={(code) => {
@@ -366,6 +409,7 @@ export default function App() {
               setInviteRoomCode(playerProfile.roomCode);
               setShowInviteModal(true);
             }}
+            onTeacherGathering={handleTeacherGathering}
             onLeaveGame={handleLeaveGame}
             onJoystickMove={(x, y) => worldRef.current?.setJoystickInput(x, y)}
             onJump={() => worldRef.current?.triggerJump()}

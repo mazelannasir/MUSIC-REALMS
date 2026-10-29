@@ -358,6 +358,16 @@ wss.on('connection', (ws) => {
             mode: msg.mode
           });
         }
+      } else if ((msg.type === 'teacher_gathering' || (msg.type === 'teacher_control' && msg.action === 'gathering')) && currentRoom && playerId) {
+        const teacherName = msg.teacherName || currentRoom.players.get(playerId)?.data.name || 'Guru';
+        broadcastToRoom(currentRoom, {
+          type: 'teacher_gathering',
+          teacherId: playerId,
+          teacherName,
+          x: typeof msg.x === 'number' ? msg.x : 0,
+          y: typeof msg.y === 'number' ? msg.y : 1.2,
+          z: typeof msg.z === 'number' ? msg.z : 0
+        });
       }
     } catch (err) {
       console.error('Error handling WebSocket message:', err);

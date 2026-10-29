@@ -25,6 +25,7 @@ interface PlayerHUDProps {
   onJoystickMove: (x: number, y: number) => void;
   onJump: () => void;
   onRotateCamera?: (deltaTheta: number) => void;
+  onTeacherGathering?: () => void;
 }
 
 export const PlayerHUD: React.FC<PlayerHUDProps> = ({
@@ -48,7 +49,8 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   onLeaveGame,
   onJoystickMove,
   onJump,
-  onRotateCamera
+  onRotateCamera,
+  onTeacherGathering
 }) => {
   const [isDockCollapsed, setIsDockCollapsed] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -56,6 +58,15 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   const [isMusicOn, setIsMusicOn] = useState(soundEngine.getMusicEnabled());
   const [isSfxOn, setIsSfxOn] = useState(soundEngine.getSfxEnabled());
   const [cameraView, setCameraView] = useState<'follow' | 'top' | 'cinematic'>('follow');
+  const [gatheringCooldown, setGatheringCooldown] = useState(0);
+
+  useEffect(() => {
+    if (gatheringCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setGatheringCooldown(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [gatheringCooldown]);
 
   // Virtual Joystick touch references
   const joystickRef = useRef<HTMLDivElement>(null);
@@ -281,6 +292,28 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
               <span>🔐</span>
               <span className="hidden sm:inline">Platform Bahan Guru</span>
               <span className="sm:hidden">Guru</span>
+            </button>
+          )}
+
+          {/* Teacher Superpower: Gathering (Himpun Semua Murid) */}
+          {(role === 'teacher' || avatarId === 6) && onTeacherGathering && (
+            <button
+              onClick={() => {
+                if (gatheringCooldown > 0) return;
+                soundEngine.playButtonClick();
+                onTeacherGathering();
+                setGatheringCooldown(6);
+              }}
+              disabled={gatheringCooldown > 0}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-xs font-black shadow-lg transition-all active:scale-95 cursor-pointer ${
+                gatheringCooldown > 0
+                  ? 'bg-slate-800/80 border-slate-700 text-slate-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 border-yellow-200 text-slate-950 shadow-amber-500/40 animate-pulse'
+              }`}
+              title="Kuasa Gathering: Teleport dan kumpulkan semua murid di lokasi guru sekarang"
+            >
+              <span>✨</span>
+              <span className="font-extrabold">{gatheringCooldown > 0 ? `Gathering (${gatheringCooldown}s)` : 'Kuasa Gathering'}</span>
             </button>
           )}
 

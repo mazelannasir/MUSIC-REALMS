@@ -9,6 +9,7 @@ export interface MultiplayerCallbacks {
   onPlayerEmote: (id: string, emote: string) => void;
   onPlayerChat: (id: string, text: string, name: string) => void;
   onClassStationUnlocked: (stationId: number, message: string) => void;
+  onTeacherGathering?: (data: { teacherId: string; teacherName: string; x: number; y: number; z: number }) => void;
   onError: (code: string, message: string) => void;
 }
 
@@ -39,6 +40,7 @@ export class MultiplayerService {
   public connect(roomCode: string, player: Partial<PlayerData>) {
     this.roomCode = roomCode.toUpperCase();
     this.player = player;
+    this.fallbackTriggered = false;
     const cleanEmail = (player.email || '').trim().toLowerCase();
     const hash = cleanEmail ? cleanEmail.split('').reduce((a: number, c: string) => ((a << 5) - a) + c.charCodeAt(0), 0) >>> 0 : Math.floor(Math.random() * 1000000);
     const safeTag = cleanEmail.replace(/[^a-z0-9]/gi, '').slice(0, 8);
@@ -55,13 +57,13 @@ export class MultiplayerService {
     try {
       this.ws = new WebSocket(wsUrl);
 
-      // If WS doesn't establish within 1200ms (standard for static sites like Netlify), switch to PeerJS
+      // Safe fallback timeout (5000ms) only for static hosts (e.g. Netlify)
       this.wsTimeoutId = window.setTimeout(() => {
         if (!this.isConnected && !this.fallbackTriggered) {
           console.info('[Multiplayer] Local WS timeout. Switching to PeerJS P2P room mesh for Netlify/static.');
           this.fallbackToPeerJS();
         }
-      }, 1200);
+      }, 5000);
 
       this.ws.onopen = () => {
         if (this.wsTimeoutId) clearTimeout(this.wsTimeoutId);
@@ -119,7 +121,8 @@ export class MultiplayerService {
     const cleanEmail = (this.player.email || '').trim().toLowerCase();
     const hash = cleanEmail ? cleanEmail.split('').reduce((a: number, c: string) => ((a << 5) - a) + c.charCodeAt(0), 0) >>> 0 : Math.floor(Math.random() * 1000000);
     const safeTag = cleanEmail.replace(/[^a-z0-9]/gi, '').slice(0, 8);
-    this.myPlayerId = cleanEmail ? `mr-${cleanRoom}-${safeTag || 'usr'}-${hash.toString(36)}` : `mr-${cleanRoom}-${Math.random().toString(36).substring(2, 8)}`;
+    const sessionSalt = Math.random().toString(36).substring(2, 6);
+    this.myPlayerId = cleanEmail ? `mr-${cleanRoom}-${safeTag || 'usr'}-${hash.toString(36)}-${sessionSalt}` : `mr-${cleanRoom}-${Math.random().toString(36).substring(2, 8)}`;
 
     // Try claiming the host role for this room code first
     this.initAsPotentialHost(hostPeerId, cleanRoom);
@@ -234,8 +237,15 @@ export class MultiplayerService {
         });
       });
 
-      this.peer.on('error', (err) => {
-        console.warn('[Multiplayer P2P] Client peer error:', err);
+      this.peer.on('error', (err: any) => {
+        if (err.type === 'unavailable-id') {
+          const freshId = `${this.myPlayerId}-${Math.random().toString(36).substring(2, 5)}`;
+          this.myPlayerId = freshId;
+          try { this.peer?.destroy(); } catch {}
+          this.initAsClient(hostPeerId);
+        } else {
+          console.warn('[Multiplayer P2P] Client peer error:', err);
+        }
       });
     } catch (e) {
       console.warn('[Multiplayer P2P] Client init error:', e);
@@ -395,6 +405,9 @@ export class MultiplayerService {
             });
             this.callbacks.onClassStationUnlocked(msg.stationId, `Guru telah membuka Stesen ${msg.stationId}!`);
           }
+        } else if (msg.type === 'teacher_gathering') {
+          this.broadcastToClientsExcept(conn.peer, msg);
+          this.callbacks.onTeacherGathering?.(msg);
         }
       });
 
@@ -448,6 +461,9 @@ export class MultiplayerService {
         break;
       case 'class_station_unlocked':
         this.callbacks.onClassStationUnlocked(msg.stationId, msg.message);
+        break;
+      case 'teacher_gathering':
+        this.callbacks.onTeacherGathering?.(msg);
         break;
       case 'error':
         this.callbacks.onError(msg.code, msg.message);
@@ -594,6 +610,32 @@ export class MultiplayerService {
         action: 'set_mode',
         mode
       });
+    }
+  }
+
+  public sendTeacherGathering(teacherName: string, x: number, y: number, z: number) {
+    const payload = {
+      type: 'teacher_gathering',
+      teacherName,
+      x,
+      y,
+      z
+    };
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendWS(payload);
+      return;
+    }
+    if (this.isHost && this.peer) {
+      this.broadcastToClientsExcept('', payload);
+      this.callbacks.onTeacherGathering?.({
+        teacherId: this.peer.id,
+        teacherName,
+        x,
+        y,
+        z
+      });
+    } else if (this.hostConn && this.hostConn.open) {
+      this.hostConn.send(payload);
     }
   }
 
