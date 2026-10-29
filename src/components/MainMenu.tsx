@@ -28,13 +28,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
   const [emailError, setEmailError] = useState<string>('');
   const [isAvatarBound, setIsAvatarBound] = useState<boolean>(false);
 
-  const [isTeacherUnlocked, setIsTeacherUnlocked] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('music_realms_teacher_unlocked_7770') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // Strict security: Teacher avatar requires passcode 7770 verification on every selection/lobby
+  const [isTeacherUnlocked, setIsTeacherUnlocked] = useState<boolean>(false);
   const [showTeacherPasscodeModal, setShowTeacherPasscodeModal] = useState<boolean>(false);
 
   const [selectedAvatarId, setSelectedAvatarId] = useState<number>(() => {
@@ -44,7 +39,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
         const storedAvatar = localStorage.getItem(`music_realms_user_avatar_${savedEmail}`);
         if (storedAvatar) {
           const num = parseInt(storedAvatar, 10);
-          if (num >= 1 && num <= 6) return num;
+          // Only auto-restore student avatars (1-5); Avatar 6 strictly requires 7770!
+          if (num >= 1 && num <= 5) return num;
         }
       }
     } catch {}
@@ -85,7 +81,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
   const [showHowToPlay, setShowHowToPlay] = useState<boolean>(false);
   const [showAbout, setShowAbout] = useState<boolean>(false);
 
-  // Sync avatar when email changes
+  // Sync avatar when email changes - never bypass 7770 for avatar 6
   useEffect(() => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
@@ -96,14 +92,19 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
       const stored = localStorage.getItem(`music_realms_user_avatar_${cleanEmail}`);
       if (stored) {
         const id = parseInt(stored, 10);
-        if (id >= 1 && id <= 6) {
-          if (id === 6 && !isTeacherUnlocked) {
-            setSelectedAvatarId(1);
-          } else {
-            setSelectedAvatarId(id);
-            if (id === 6) setRole('teacher');
-          }
+        if (id >= 1 && id <= 5) {
+          setSelectedAvatarId(id);
           setIsAvatarBound(true);
+          return;
+        } else if (id === 6) {
+          if (isTeacherUnlocked) {
+            setSelectedAvatarId(6);
+            setRole('teacher');
+            setIsAvatarBound(true);
+          } else {
+            setSelectedAvatarId(1);
+            setIsAvatarBound(false);
+          }
           return;
         }
       }
@@ -127,6 +128,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
   const handleSelectAvatar = (avatar: AvatarDefinition) => {
     soundEngine.playButtonClick();
     if (avatar.id === 6 || avatar.isTeacherOnly) {
+      // STRICT REQUIREMENT: User MUST enter 7770 to select special teacher avatar!
       if (!isTeacherUnlocked) {
         setShowTeacherPasscodeModal(true);
         return;
@@ -154,9 +156,6 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
   };
 
   const handleTeacherPasscodeSuccess = () => {
-    try {
-      localStorage.setItem('music_realms_teacher_unlocked_7770', 'true');
-    } catch {}
     setIsTeacherUnlocked(true);
     setRole('teacher');
     setSelectedAvatarId(6);
@@ -164,7 +163,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStartAdventure, onOpenTeac
   };
 
   const handleStart = () => {
-    if (selectedAvatarId === 6 && !isTeacherUnlocked) {
+    // Strict guard: Avatar 6 or teacher role MUST have verified 7770
+    if ((selectedAvatarId === 6 || role === 'teacher') && !isTeacherUnlocked) {
       setShowTeacherPasscodeModal(true);
       return;
     }

@@ -1318,20 +1318,69 @@ export class MusicWorld {
       teacherLight.position.set(0, 2.0, 0);
       root.add(teacherLight);
 
-      // 2. Luminous Celestial Sky Beacon Pillar (Visible across the entire sky kingdom!)
-      const beaconGeo = new THREE.CylinderGeometry(0.35, 0.85, 24, 16, 1, true);
-      const beaconMat = new THREE.MeshBasicMaterial({
+      // 2. Surrounding Celestial Orbital Rings & Glowing Cocoon (Envelops teacher closely)
+      const auraGroup = new THREE.Group();
+      auraGroup.position.set(0, 1.1, 0);
+
+      // A. Closely surrounding spherical energy aura
+      const auraSphereGeo = new THREE.SphereGeometry(1.65, 24, 20);
+      const auraSphereMat = new THREE.MeshBasicMaterial({
         color: 0xfacc15,
         transparent: true,
-        opacity: 0.38,
+        opacity: 0.22,
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const auraSphere = new THREE.Mesh(auraSphereGeo, auraSphereMat);
+      auraGroup.add(auraSphere);
+      this.animatedProps.push({ mesh: auraSphere, type: 'pulse', speed: 1.8, offset: 0 });
+
+      // B. Golden orbital ring encircling the teacher at a stylish 15-degree tilt
+      const ringGoldGeo = new THREE.TorusGeometry(1.35, 0.045, 12, 36);
+      const ringGoldMat = new THREE.MeshBasicMaterial({
+        color: 0xfbbf24,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending
+      });
+      const ringGold = new THREE.Mesh(ringGoldGeo, ringGoldMat);
+      ringGold.rotation.x = Math.PI * 0.35;
+      ringGold.rotation.y = 0.2;
+      auraGroup.add(ringGold);
+      this.animatedProps.push({ mesh: ringGold, type: 'spin', speed: 1.2, offset: 0 });
+
+      // C. Cyan orbital ring encircling the teacher at -25-degree tilt
+      const ringCyanGeo = new THREE.TorusGeometry(1.5, 0.038, 12, 36);
+      const ringCyanMat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending
+      });
+      const ringCyan = new THREE.Mesh(ringCyanGeo, ringCyanMat);
+      ringCyan.rotation.x = -Math.PI * 0.3;
+      ringCyan.rotation.z = 0.3;
+      auraGroup.add(ringCyan);
+      this.animatedProps.push({ mesh: ringCyan, type: 'spin', speed: -1.0, offset: 0 });
+
+      // D. Radiant ground ring circling beneath the teacher's feet
+      const groundRingGeo = new THREE.RingGeometry(0.8, 1.6, 32);
+      const groundRingMat = new THREE.MeshBasicMaterial({
+        color: 0xfacc15,
+        transparent: true,
+        opacity: 0.75,
         side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
         depthWrite: false
       });
-      const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
-      beaconMesh.position.set(0, 12, 0);
-      root.add(beaconMesh);
-      this.animatedProps.push({ mesh: beaconMesh, type: 'spin', speed: 0.5, offset: 0 });
+      const groundRing = new THREE.Mesh(groundRingGeo, groundRingMat);
+      groundRing.rotation.x = -Math.PI / 2;
+      groundRing.position.y = 0.03;
+      root.add(groundRing);
+      this.animatedProps.push({ mesh: groundRing, type: 'spin', speed: 0.6, offset: 0 });
+
+      root.add(auraGroup);
 
       // 3. Radiant Glowing Crown
       const crown = new THREE.Mesh(
